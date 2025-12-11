@@ -18,18 +18,18 @@
    - Look for the app named **emailbanners**
    - Or navigate directly to: https://share.streamlit.io (then find your app)
 
-3. **Open App Settings**
-   - Click on the **emailbanners** app
-   - Click the **⋮** (three dots) menu or **Settings** button
+3. **Delete the Existing App**
+   - Click on the **emailbanners** app to open it
+   - Look for **"Manage app"** button (usually in lower-right corner or ⋮ menu)
+   - Click **"Manage app"** → **"Delete app"**
+   - Confirm deletion (don't worry - your code is safe on GitHub!)
 
-4. **Update Main File**
-   - Find the **Main file** field
-   - Change from: `streamlit_app.py`
-   - Change to: `app.py`
-   - Verify **Branch** is `main` (or your default branch)
-
-5. **Save and Deploy**
-   - Click **Save** or **Deploy**
+4. **Redeploy with New Main File**
+   - Click **"New app"** button (top right or main dashboard)
+   - Select your repository: `egrandmaison89/luminate-email-banners`
+   - Select **Branch**: `main`
+   - **Important:** In **"Main file path"** field, enter: `app.py`
+   - Click **"Deploy"**
    - Streamlit Cloud will automatically:
      - Pull the latest code from GitHub
      - Install dependencies from requirements.txt
@@ -59,9 +59,10 @@
 ## Rollback (If Needed)
 
 If something goes wrong:
-1. In Streamlit Cloud settings, change **Main file** back to `streamlit_app.py`
-2. Save - old app will be restored immediately
-3. Investigate issues and try again
+1. Delete the current app deployment
+2. Create a new app and set **Main file path** to `streamlit_app.py`
+3. Deploy - old app will be restored
+4. Investigate issues and try again
 
 ## Files Ready for Deployment
 

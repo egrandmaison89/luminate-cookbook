@@ -9,14 +9,19 @@ git commit -m "Deploy unified Luminate Cookbook with multi-page navigation"
 git push origin main
 ```
 
-### Step 2: Update Streamlit Cloud (Then do this)
+### Step 2: Redeploy on Streamlit Cloud (Then do this)
+
+**Note:** Streamlit Cloud doesn't allow changing the main file directly. You need to delete and redeploy.
 
 1. Go to https://share.streamlit.io
 2. Click on your **emailbanners** app
-3. Change **Main file** from `streamlit_app.py` to `app.py`
-4. Click **Save**
-5. Wait 2-5 minutes for deployment
-6. Visit https://emailbanners.streamlit.app/ to verify
+3. Click **"Manage app"** → **"Delete app"** (your code is safe on GitHub!)
+4. Click **"New app"**
+5. Select repo: `egrandmaison89/luminate-email-banners`, branch: `main`
+6. **Main file path:** Enter `app.py`
+7. Click **"Deploy"**
+8. Wait 2-5 minutes for deployment
+9. Visit https://emailbanners.streamlit.app/ to verify
 
 ## ✅ What's Ready
 

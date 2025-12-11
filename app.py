@@ -101,6 +101,20 @@ def home_page():
         </div>
         """, unsafe_allow_html=True)
     
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        st.markdown("""
+        <div class="tool-card">
+            <div class="tool-title">🔍 PageBuilder Decomposer</div>
+            <div class="tool-description">
+                Extract all nested PageBuilders from a Luminate Online PageBuilder. 
+                Enter a URL or PageBuilder name and download all components as separate 
+                HTML files in a ZIP archive. No login required.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
     # Quick start
     st.markdown("---")
     st.markdown("## 🚀 Quick Start")
@@ -108,6 +122,7 @@ def home_page():
     1. **Use the sidebar** to navigate to any tool
     2. **Email Banner Processor**: Upload images, adjust settings, download optimized banners
     3. **Image Uploader**: Enter credentials, select images, upload to Luminate Online
+    4. **PageBuilder Decomposer**: Extract nested PageBuilders as separate HTML files
     
     All tools are ready to use - no configuration needed!
     """)
@@ -172,6 +187,12 @@ def image_uploader_page():
     load_and_run_page(file_path)
 
 
+def pagebuilder_decomposer_page():
+    """PageBuilder Decomposer page."""
+    file_path = os.path.join(os.path.dirname(__file__), "pages", "3_PageBuilder_Decomposer.py")
+    load_and_run_page(file_path)
+
+
 # Create page objects using st.Page
 home = st.Page(
     home_page,
@@ -192,9 +213,15 @@ image_uploader = st.Page(
     icon="📤"
 )
 
+pagebuilder_decomposer = st.Page(
+    pagebuilder_decomposer_page,
+    title="PageBuilder Decomposer",
+    icon="🔍"
+)
+
 # Set up navigation
 pages = {
-    "Luminate Cookbook": [home, email_banner, image_uploader]
+    "Luminate Cookbook": [home, email_banner, image_uploader, pagebuilder_decomposer]
 }
 
 # Run the selected page
