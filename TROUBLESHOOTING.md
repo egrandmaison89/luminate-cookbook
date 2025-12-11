@@ -87,7 +87,7 @@ Streamlit Cloud should have system dependencies available, but if you encounter 
 2. **Contact Streamlit Cloud Support**
    - This may indicate that the base image is missing required libraries
    - Streamlit Cloud support can help ensure system dependencies are available
-   - Reference: The app needs libraries from `packages.txt` to be available
+   - Note: The app handles missing Playwright gracefully - it will show an error message instead of crashing
 
 3. **Verify Playwright Installation**
    - The app automatically installs Playwright browsers on first use
@@ -100,11 +100,28 @@ If running locally or in Docker:
 
 1. **Install System Dependencies**
    ```bash
-   # On Debian/Ubuntu:
+   # On Debian/Ubuntu, install required packages:
    sudo apt update
-   sudo apt install -y $(cat packages.txt)
+   sudo apt install -y \
+     libnspr4 \
+     libnss3 \
+     libatk-bridge2.0-0 \
+     libatk1.0-0 \
+     libatspi2.0-0 \
+     libcups2 \
+     libdbus-1-3 \
+     libdrm2 \
+     libgbm1 \
+     libgtk-3-0 \
+     libxkbcommon0 \
+     libxcomposite1 \
+     libxdamage1 \
+     libxfixes3 \
+     libxrandr2 \
+     libxss1 \
+     libasound2
    
-   # Or install Playwright's system dependencies:
+   # Or install Playwright's system dependencies (recommended):
    python -m playwright install-deps chromium
    ```
 
@@ -117,7 +134,11 @@ If running locally or in Docker:
 3. **Dockerfile Example**
    If using a custom Dockerfile, add:
    ```dockerfile
-   RUN apt-get update && apt-get install -y $(cat packages.txt) && rm -rf /var/lib/apt/lists/*
+   RUN apt-get update && apt-get install -y \
+       libnspr4 libnss3 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 \
+       libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 libxkbcommon0 \
+       libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxss1 libasound2 \
+       && rm -rf /var/lib/apt/lists/*
    RUN pip install -r requirements.txt
    RUN python -m playwright install chromium
    RUN python -m playwright install-deps chromium
@@ -133,14 +154,24 @@ The app tries to:
 
 ### Required System Libraries
 
-The following libraries are needed (see `packages.txt`):
+The following libraries are needed for Playwright Chromium to work locally or in Docker:
 - `libnspr4` - Netscape Portable Runtime
 - `libnss3` - Network Security Services
-- Additional Chromium dependencies (GTK, X11, etc.)
+- `libatk-bridge2.0-0`, `libatk1.0-0`, `libatspi2.0-0` - Accessibility toolkit
+- `libcups2` - Printing support
+- `libdbus-1-3` - Inter-process communication
+- `libdrm2`, `libgbm1` - Graphics drivers
+- `libgtk-3-0` - GTK+ library
+- `libxkbcommon0` - Keyboard handling
+- `libxcomposite1`, `libxdamage1`, `libxfixes3`, `libxrandr2`, `libxss1` - X11 extensions
+- `libasound2` - Audio support
+
+**Note for Streamlit Cloud**: These packages are not needed. The app handles missing Playwright gracefully and will show a helpful error message if browser automation is unavailable.
 
 ### Still Having Issues?
 
 1. Check the full error message in Streamlit Cloud logs
 2. Verify `playwright>=1.40.0` is in `requirements.txt`
 3. Try redeploying the app (sometimes fixes dependency issues)
-4. For Streamlit Cloud: Contact support with the error message and reference to `packages.txt`
+4. For Streamlit Cloud: The app will show a clear error message if Playwright isn't available - this is expected and the app will still work for other tools
+5. For local deployments: Install the system packages listed above or use `python -m playwright install-deps chromium`

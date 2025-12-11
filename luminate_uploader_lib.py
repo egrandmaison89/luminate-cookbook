@@ -413,9 +413,11 @@ def ensure_playwright_browsers_installed(progress_callback=None):
                                 f"Browser installed but missing system dependencies. "
                                 f"Please install required system libraries. "
                                 f"Error: {str(retry_error)}\n\n"
-                                f"For Linux/Docker, install packages from packages.txt:\n"
-                                f"  sudo apt update && sudo apt install -y $(cat packages.txt)\n\n"
-                                f"Or run: python -m playwright install-deps chromium"
+                                f"For Linux/Docker, install system dependencies:\n"
+                                f"  python -m playwright install-deps chromium\n\n"
+                                f"Or manually install: libnspr4 libnss3 libatk-bridge2.0-0 libatk1.0-0 "
+                                f"libatspi2.0-0 libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 "
+                                f"libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxss1 libasound2"
                             )
                         raise RuntimeError(error_msg)
                     raise
@@ -542,16 +544,16 @@ def upload_images_batch(username, password, image_paths, progress_callback=None)
                             f"Missing system library detected (likely libnspr4.so or similar). "
                             f"This is a known issue with Playwright on Streamlit Cloud. "
                             f"Error: {error_str}\n\n"
-                            f"Please contact Streamlit Cloud support or check deployment logs. "
-                            f"System dependencies from packages.txt need to be available."
+                            f"The app will show a helpful error message instead of crashing. "
+                            f"Browser automation is not available on Streamlit Cloud due to system dependency limitations."
                         )
                     else:
                         raise RuntimeError(
                             f"Missing system library detected. "
                             f"Error: {error_str}\n\n"
                             f"Please install system dependencies:\n"
-                            f"  sudo apt update && sudo apt install -y $(cat packages.txt)\n"
-                            f"Or run: python -m playwright install-deps chromium"
+                            f"  python -m playwright install-deps chromium\n\n"
+                            f"Or manually install required packages. See TROUBLESHOOTING.md for details."
                         )
                 elif "executable doesn't exist" in error_lower or "browsers" in error_lower:
                     # Provide helpful error message
@@ -634,14 +636,14 @@ def upload_images_batch(username, password, image_paths, progress_callback=None)
             if is_streamlit_cloud():
                 error_msg += (
                     "\n\nMissing system library detected. This is a known issue with Playwright on Streamlit Cloud. "
-                    "Please contact Streamlit Cloud support or check deployment logs. "
-                    "System dependencies from packages.txt need to be available."
+                    "The app handles this gracefully and will show a helpful error message. "
+                    "Browser automation is not available on Streamlit Cloud due to system dependency limitations."
                 )
             else:
                 error_msg += (
                     "\n\nMissing system library detected. Please install system dependencies:\n"
-                    "  sudo apt update && sudo apt install -y $(cat packages.txt)\n"
-                    "Or run: python -m playwright install-deps chromium"
+                    "  python -m playwright install-deps chromium\n\n"
+                    "Or see TROUBLESHOOTING.md for manual installation instructions."
                 )
         elif "executable doesn't exist" in error_lower:
             error_msg += "\nPlease run: python -m playwright install chromium"
