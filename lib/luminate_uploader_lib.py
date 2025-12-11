@@ -4,6 +4,10 @@ Luminate Online Upload Library
 
 Reusable functions for uploading images to Luminate Online Image Library.
 Can be used by both CLI scripts and web applications.
+
+Supports two authentication modes:
+1. Username/password login (may trigger 2FA)
+2. Cookie passthrough (uses user's existing browser session, bypasses 2FA)
 """
 
 import os
@@ -23,6 +27,10 @@ import hashlib
 LOGIN_URL = "https://secure2.convio.net/dfci/admin/AdminLogin"
 IMAGE_LIBRARY_URL = "https://secure2.convio.net/dfci/admin/ImageLibrary"
 BASE_URL = "https://danafarber.jimmyfund.org/images/content/pagebuilder/"
+
+# Authentication modes
+AUTH_MODE_LOGIN = "login"  # Traditional username/password (may trigger 2FA)
+AUTH_MODE_COOKIES = "cookies"  # Use pre-authenticated cookies (bypasses 2FA)
 
 
 def is_streamlit_cloud():
@@ -1042,4 +1050,239 @@ def upload_images_batch(username, password, image_paths, progress_callback=None)
         'successful': successful,
         'failed': failed,
         'urls': urls
+    }
+
+
+def upload_images_with_cookies(cookies, image_paths, progress_callback=None):
+    """
+    Upload images using pre-authenticated cookies (bypasses 2FA).
+    
+    This is the recommended approach when users have an existing Luminate session
+    in their browser. They can export their session cookies and use them here,
+    avoiding the need to log in again (which would trigger 2FA from the server).
+    
+    Args:
+        cookies: List of cookie dicts or Playwright storage state dict
+                 Each cookie should have: name, value, domain, path
+        image_paths: List of paths to image files
+        progress_callback: Optional callback function(current, total, filename, status)
+        
+    Returns:
+        dict: {
+            'successful': list of filenames,
+            'failed': list of (filename, error) tuples,
+            'urls': list of URLs for successful uploads
+        }
+    """
+    successful = []
+    failed = []
+    urls = []
+    
+    # Ensure Playwright browsers are installed
+    try:
+        if not ensure_playwright_browsers_installed(progress_callback):
+            error_msg = "Playwright browsers are not installed."
+            for image_path in image_paths:
+                filename = os.path.basename(image_path)
+                failed.append((filename, error_msg))
+            return {'successful': successful, 'failed': failed, 'urls': urls}
+    except Exception as e:
+        error_msg = f"Playwright setup error: {str(e)}"
+        for image_path in image_paths:
+            filename = os.path.basename(image_path)
+            failed.append((filename, error_msg))
+        return {'successful': successful, 'failed': failed, 'urls': urls}
+    
+    # Import Playwright
+    try:
+        sync_playwright, _, PlaywrightError = _import_playwright()
+    except (ImportError, RuntimeError) as e:
+        error_msg = f"Cannot use browser automation: {str(e)}"
+        for image_path in image_paths:
+            filename = os.path.basename(image_path)
+            failed.append((filename, error_msg))
+        return {'successful': successful, 'failed': failed, 'urls': urls}
+    
+    # Normalize cookies to Playwright storage state format
+    if isinstance(cookies, list):
+        storage_state = {'cookies': cookies, 'origins': []}
+    elif isinstance(cookies, dict) and 'cookies' in cookies:
+        storage_state = cookies
+    else:
+        error_msg = "Invalid cookie format"
+        for image_path in image_paths:
+            filename = os.path.basename(image_path)
+            failed.append((filename, error_msg))
+        return {'successful': successful, 'failed': failed, 'urls': urls}
+    
+    try:
+        with sync_playwright() as p:
+            if progress_callback:
+                progress_callback(0, len(image_paths), "Starting browser...", "info")
+            
+            browser = p.chromium.launch(headless=True)
+            
+            # Context options with realistic browser fingerprint
+            context_options = {
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'viewport': {'width': 1920, 'height': 1080},
+                'locale': 'en-US',
+                'timezone_id': 'America/New_York',
+                'color_scheme': 'light',
+                'extra_http_headers': {
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                }
+            }
+            
+            # Create context with cookies
+            context = browser.new_context(**context_options, storage_state=storage_state)
+            page = context.new_page()
+            
+            # Inject anti-detection script
+            page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+                window.chrome = { runtime: {} };
+            """)
+            
+            try:
+                # Navigate directly to Image Library (cookies should authenticate us)
+                if progress_callback:
+                    progress_callback(0, len(image_paths), "Verifying session...", "info")
+                
+                page.goto(IMAGE_LIBRARY_URL, timeout=30000)
+                page.wait_for_load_state("networkidle")
+                
+                # Check if we're authenticated
+                current_url = page.url
+                if 'AdminLogin' in current_url or 'login' in current_url.lower():
+                    # Cookies didn't work - session might be expired
+                    error_msg = (
+                        "Session cookies are invalid or expired. "
+                        "Please log into Luminate in your browser again and export fresh cookies."
+                    )
+                    for image_path in image_paths:
+                        filename = os.path.basename(image_path)
+                        failed.append((filename, error_msg))
+                    return {'successful': successful, 'failed': failed, 'urls': urls}
+                
+                # Check for 2FA prompt (shouldn't happen with valid cookies, but just in case)
+                page_content = page.content().lower()
+                two_factor_indicators = ['two-factor', '2fa', 'verification code', 'authenticator']
+                if any(indicator in page_content for indicator in two_factor_indicators):
+                    error_msg = (
+                        "2FA is still being requested. Your session cookies may not include the 2FA completion. "
+                        "Please complete 2FA in your browser and export cookies again."
+                    )
+                    for image_path in image_paths:
+                        filename = os.path.basename(image_path)
+                        failed.append((filename, error_msg))
+                    return {'successful': successful, 'failed': failed, 'urls': urls}
+                
+                # Verify we can see the Upload button
+                try:
+                    page.wait_for_selector('text=Upload Image', timeout=10000)
+                except:
+                    error_msg = "Could not access Image Library. Session may be invalid."
+                    for image_path in image_paths:
+                        filename = os.path.basename(image_path)
+                        failed.append((filename, error_msg))
+                    return {'successful': successful, 'failed': failed, 'urls': urls}
+                
+                if progress_callback:
+                    progress_callback(0, len(image_paths), "Session valid! Starting uploads...", "info")
+                
+                # Upload each image
+                for i, image_path in enumerate(image_paths, 1):
+                    filename = os.path.basename(image_path)
+                    
+                    if progress_callback:
+                        progress_callback(i, len(image_paths), filename, "uploading")
+                    
+                    success, uploaded_filename, error, url = upload_image(page, image_path, verify=True)
+                    
+                    if success and url:
+                        successful.append(uploaded_filename)
+                        urls.append(url)
+                        if progress_callback:
+                            progress_callback(i, len(image_paths), filename, "success")
+                    else:
+                        error_msg = error or "Upload verification failed"
+                        failed.append((filename, error_msg))
+                        if progress_callback:
+                            progress_callback(i, len(image_paths), filename, "error")
+                
+            finally:
+                browser.close()
+                
+    except Exception as e:
+        error_msg = f"Upload error: {str(e)}"
+        for image_path in image_paths:
+            filename = os.path.basename(image_path)
+            if not any(f[0] == filename for f in failed):  # Avoid duplicates
+                failed.append((filename, error_msg))
+    
+    return {
+        'successful': successful,
+        'failed': failed,
+        'urls': urls
+    }
+
+
+def upload_images_auto(
+    image_paths, 
+    username=None, 
+    password=None, 
+    cookies=None,
+    progress_callback=None
+):
+    """
+    Unified upload function that automatically chooses the best authentication method.
+    
+    Priority:
+    1. If cookies provided and valid -> use cookie-based auth (no 2FA)
+    2. If username/password provided -> use login-based auth (may trigger 2FA)
+    
+    Args:
+        image_paths: List of paths to image files
+        username: Optional Luminate username
+        password: Optional Luminate password  
+        cookies: Optional pre-authenticated cookies (recommended to avoid 2FA)
+        progress_callback: Optional callback function(current, total, filename, status)
+        
+    Returns:
+        dict: {
+            'successful': list of filenames,
+            'failed': list of (filename, error) tuples,
+            'urls': list of URLs for successful uploads,
+            'auth_method': 'cookies' or 'login'
+        }
+    """
+    # Try cookies first (preferred - no 2FA)
+    if cookies:
+        if progress_callback:
+            progress_callback(0, len(image_paths), "Using session cookies (no login needed)...", "info")
+        
+        result = upload_images_with_cookies(cookies, image_paths, progress_callback)
+        result['auth_method'] = 'cookies'
+        return result
+    
+    # Fall back to login
+    if username and password:
+        if progress_callback:
+            progress_callback(0, len(image_paths), "Logging in (may require 2FA)...", "info")
+        
+        result = upload_images_batch(username, password, image_paths, progress_callback)
+        result['auth_method'] = 'login'
+        return result
+    
+    # No auth provided
+    error_msg = "No authentication provided. Please provide either cookies or username/password."
+    return {
+        'successful': [],
+        'failed': [(os.path.basename(p), error_msg) for p in image_paths],
+        'urls': [],
+        'auth_method': None
     }
