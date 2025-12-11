@@ -10,7 +10,17 @@ import streamlit.components.v1 as components
 import tempfile
 import os
 import json
-from luminate_uploader_lib import upload_images_batch, check_playwright_available
+
+# Lazy import to handle cases where luminate_uploader_lib might have issues
+try:
+    from luminate_uploader_lib import upload_images_batch, check_playwright_available
+    LIBRARY_AVAILABLE = True
+except ImportError as e:
+    LIBRARY_AVAILABLE = False
+    IMPORT_ERROR = str(e)
+except Exception as e:
+    LIBRARY_AVAILABLE = False
+    IMPORT_ERROR = f"Error importing library: {str(e)}"
 
 # Page configuration
 st.set_page_config(
@@ -66,8 +76,24 @@ def main():
     st.title("📤 Image Uploader")
     st.markdown("---")
     
+    # Check if the library is available
+    if not LIBRARY_AVAILABLE:
+        st.markdown("""
+        <div class="error-box">
+        <strong>⚠️ Image Uploader Unavailable</strong><br><br>
+        The Image Uploader library could not be loaded. This may be due to missing dependencies or installation issues.
+        </div>
+        """, unsafe_allow_html=True)
+        st.error(f"Import error: {IMPORT_ERROR}")
+        st.info("Please check the deployment logs or contact support.")
+        return
+    
     # Check if Playwright is available
-    playwright_available, playwright_error = check_playwright_available()
+    try:
+        playwright_available, playwright_error = check_playwright_available()
+    except Exception as e:
+        playwright_available = False
+        playwright_error = f"Error checking Playwright availability: {str(e)}"
     
     if not playwright_available:
         # Show error message if browser automation is not available

@@ -283,52 +283,24 @@ def generate_url(filename):
 def check_playwright_available():
     """Check if Playwright is available and can be used.
     
-    This function safely checks if Playwright can be imported and initialized
-    without actually launching a browser. Used by the UI to show appropriate
-    status messages.
+    This function safely checks if Playwright can be imported without
+    actually initializing it or accessing system libraries. Used by the UI 
+    to show appropriate status messages. The actual browser check happens
+    when upload is attempted.
     
     Returns:
         tuple: (available: bool, error_message: str or None)
-        - available: True if Playwright can be used, False otherwise
+        - available: True if Playwright can be imported, False otherwise
         - error_message: None if available, otherwise a user-friendly error message
     """
     try:
-        # Try to import Playwright
-        sync_playwright, _, _ = _import_playwright()
+        # Just check if Playwright can be imported - don't try to initialize it
+        # Initialization might access system libraries that aren't available
+        # The actual browser check will happen when upload is attempted
+        _import_playwright()
         
-        # Try to initialize Playwright (this checks if it's properly installed)
-        # We don't launch a browser here to avoid overhead
-        try:
-            p = sync_playwright().start()
-            p.stop()
-        except Exception as e:
-            error_str = str(e).lower()
-            error_message = str(e)
-            
-            # Check for missing system library errors
-            missing_lib_indicators = [
-                "cannot open shared object file",
-                "libnspr4.so",
-                "shared libraries",
-                "no such file or directory"
-            ]
-            is_missing_lib = any(indicator in error_message.lower() for indicator in missing_lib_indicators)
-            
-            if is_missing_lib:
-                if is_streamlit_cloud():
-                    return (False, (
-                        "Browser automation is not available due to missing system dependencies. "
-                        "This is a known limitation on Streamlit Cloud. "
-                        "Please contact Streamlit Cloud support or check deployment logs."
-                    ))
-                else:
-                    return (False, (
-                        "Browser automation is not available due to missing system dependencies. "
-                        "Please install required libraries. See packages.txt for details."
-                    ))
-            else:
-                return (False, f"Playwright initialization failed: {str(e)}")
-        
+        # If import succeeds, assume it's available
+        # We'll catch actual browser/system dependency errors when trying to use it
         return (True, None)
         
     except ImportError as e:

@@ -160,6 +160,7 @@ def load_and_run_page(file_path):
         
         module = importlib.util.module_from_spec(spec)
         # Execute the module (this is where set_page_config would be called)
+        # This will catch import errors from the module itself
         spec.loader.exec_module(module)
         
         # Run the main function
@@ -167,8 +168,19 @@ def load_and_run_page(file_path):
             module.main()
         else:
             st.error(f"Page module {file_path} does not have a main() function")
+    except ImportError as e:
+        # Handle import errors specifically
+        st.error(f"⚠️ Import error loading page: {str(e)}")
+        st.info("This may be due to missing dependencies. Check deployment logs for details.")
+    except SyntaxError as e:
+        # Handle syntax errors
+        st.error(f"⚠️ Syntax error in page module: {str(e)}")
     except Exception as e:
+        # Handle all other errors
         st.error(f"Error loading page: {str(e)}")
+        import traceback
+        with st.expander("Technical details"):
+            st.code(traceback.format_exc())
     finally:
         # Restore original set_page_config
         st_module.set_page_config = original_set_page_config
