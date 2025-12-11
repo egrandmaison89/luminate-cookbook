@@ -124,6 +124,8 @@ JPEG_QUALITY = 82
 
 ## 🚀 Deploying to Streamlit Cloud (Free)
 
+### Standard Deployment (Email Banner Processor & PageBuilder Decomposer)
+
 1. **Create a GitHub repository** and push this folder
 
 2. **Go to** [share.streamlit.io](https://share.streamlit.io)
@@ -137,11 +139,38 @@ JPEG_QUALITY = 82
 
 5. **Share the URL** with your team (e.g., `https://your-app.streamlit.app`)
 
+### Image Uploader on Streamlit Cloud
+
+**⚠️ Important:** Streamlit Cloud doesn't support Dockerfiles. The Image Uploader requires Playwright system libraries.
+
+**Option 1: Try packages.txt**
+- A `packages.txt` file is included with required system packages
+- Streamlit Cloud will automatically use it during deployment
+- May work, but some packages might not be available
+
+**Option 2: Deploy to Google Cloud Run** ⭐ (Recommended)
+- Full Image Uploader functionality available
+- Free tier: 2 million requests/month
+- Easy deployment with included scripts
+- See [GOOGLE_CLOUD_RUN_DEPLOYMENT.md](GOOGLE_CLOUD_RUN_DEPLOYMENT.md) for complete guide
+
+**Option 3: Deploy to Other Platforms**
+- Railway, Fly.io, or other Docker-supporting platforms
+- See [STREAMLIT_CLOUD_ALTERNATIVES.md](STREAMLIT_CLOUD_ALTERNATIVES.md) for details
+
+**Option 3: Use Locally**
+- Image Uploader works perfectly when running locally
+- Deploy other tools to Streamlit Cloud
+- Use Image Uploader on your local machine
+
+See [STREAMLIT_CLOUD_ALTERNATIVES.md](STREAMLIT_CLOUD_ALTERNATIVES.md) for all options.
+
 Your teammates can now:
 - Visit the URL from any device
 - Navigate between tools using the sidebar
 - Use the Email Banner Processor to create optimized banners
-- Use the Image Uploader to batch upload to Luminate Online
+- Use the Image Uploader to batch upload to Luminate Online (requires Docker deployment)
+- Use the PageBuilder Decomposer to extract nested PageBuilders
 - Access all tools from a single unified interface
 
 ---
