@@ -149,181 +149,156 @@ def main():
     <div class="info-box">
     <strong>Welcome!</strong> Upload multiple images to your Luminate Online Image Library in just a few clicks.
     <br><br>
-    <strong>🔑 Recommended: Use Cookie Authentication</strong> to bypass 2FA completely! 
-    If you're already logged into Luminate in your browser, you can export your session cookies 
-    and upload without triggering 2FA.
+    <strong>🔑 Tip:</strong> Import your browser cookies to bypass 2FA! If cookies expire, 
+    we'll fall back to username/password login.
     </div>
     """, unsafe_allow_html=True)
-    
-    # Step 1: Authentication Method Selection
-    st.subheader("Step 1: Choose Authentication Method")
-    
-    auth_method = st.radio(
-        "How would you like to authenticate?",
-        options=["🍪 Cookie Passthrough (Recommended - No 2FA!)", "🔐 Username & Password (May trigger 2FA)"],
-        index=0,
-        help="Cookie passthrough uses your existing browser session to avoid 2FA"
-    )
-    
-    use_cookies = "Cookie" in auth_method
     
     # Initialize session state for cookies
     if 'imported_cookies' not in st.session_state:
         st.session_state.imported_cookies = None
     
-    if use_cookies:
-        # Cookie-based authentication
-        st.markdown("---")
-        st.markdown("### 🍪 Import Your Browser Session")
-        
-        st.info("""
-        **How this works:** When you log into Luminate in your browser, your session is stored in cookies.
-        By importing these cookies, our app can use your authenticated session - no 2FA needed!
-        """)
-        
-        with st.expander("📋 Quick Instructions", expanded=True):
-            st.markdown("""
-            **Chrome/Edge Users:**
-            1. **Log into Luminate Online** in your browser (complete 2FA if prompted)
-            2. Open the Luminate admin page (e.g., Image Library)
-            3. Press **F12** to open Developer Tools
-            4. Go to **Application** tab → **Cookies** → **secure2.convio.net**
-            5. Find **JSESSIONID** and copy its value
-            6. Paste below in format: `JSESSIONID=your_value`
-            
-            **Tip:** You can copy multiple cookies, one per line.
-            """)
-        
-        # Cookie input
-        cookie_input = st.text_area(
-            "Paste your cookies here",
-            height=100,
-            placeholder="JSESSIONID=ABC123DEF456...\nother_cookie=value...",
-            help="Paste cookies in name=value format, one per line"
+    # Step 1: Credentials (always needed as fallback)
+    st.subheader("Step 1: Enter Your Luminate Credentials")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        username = st.text_input(
+            "Username",
+            value=st.session_state.get('username', ''),
+            help="Your Luminate Online username (email address)"
         )
+    with col2:
+        password = st.text_input(
+            "Password",
+            type="password",
+            value="",
+            help="Your Luminate Online password"
+        )
+    
+    # Check for saved session
+    has_saved_session = False
+    if username and LIBRARY_AVAILABLE:
+        try:
+            saved_state = load_browser_state(username)
+            has_saved_session = saved_state is not None
+        except:
+            has_saved_session = False
+    
+    # Show session status
+    if username and has_saved_session:
+        col_clear1, col_clear2 = st.columns([3, 1])
+        with col_clear1:
+            st.success("✅ Saved server session found for this account.")
+        with col_clear2:
+            if st.button("🗑️ Clear", key="clear_session", help="Clear saved session"):
+                try:
+                    if clear_browser_state(username):
+                        st.success("Session cleared!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+    
+    # Step 2: Cookie Import (optional but recommended)
+    st.markdown("---")
+    st.subheader("Step 2: Import Browser Cookies (Recommended)")
+    
+    st.info("""
+    🍪 **Bypass 2FA!** If you're already logged into Luminate in your browser, 
+    import your session cookies to skip the login/2FA step entirely.
+    """)
+    
+    with st.expander("📋 How to get your cookies", expanded=False):
+        st.markdown("""
+        **Chrome/Edge Users:**
+        1. **Log into Luminate Online** in your browser (complete 2FA if prompted)
+        2. Open the Luminate admin page (e.g., Image Library)
+        3. Press **F12** to open Developer Tools
+        4. Go to **Application** tab → **Cookies** → **secure2.convio.net**
+        5. Find **JSESSIONID** and copy its value
+        6. Paste below in format: `JSESSIONID=your_value`
         
-        # Parse cookies if provided
-        cookies = None
-        if cookie_input and cookie_input.strip():
-            if COOKIE_HELPER_AVAILABLE:
-                # Try base64 encoded format first (from bookmarklet)
-                parsed = parse_cookie_export(cookie_input.strip())
-                if parsed:
-                    cookies = cookies_to_playwright_state(parsed)
-                    st.success(f"✅ Imported {len(parsed.get('cookies', []))} cookies from bookmarklet export")
-                else:
-                    # Try simple name=value format
-                    simple_cookies = parse_simple_cookie_paste(cookie_input)
-                    if simple_cookies:
-                        cookies = {'cookies': simple_cookies, 'origins': []}
-                        st.success(f"✅ Parsed {len(simple_cookies)} cookies")
-                    else:
-                        st.error("❌ Could not parse cookies. Please check the format.")
+        **Tip:** You can copy multiple cookies, one per line.
+        """)
+    
+    # Cookie input
+    cookie_input = st.text_area(
+        "Paste your cookies here (optional)",
+        height=80,
+        placeholder="JSESSIONID=ABC123DEF456...",
+        help="Paste cookies in name=value format, one per line. Leave empty to use username/password only."
+    )
+    
+    # Parse cookies if provided
+    cookies = None
+    if cookie_input and cookie_input.strip():
+        if COOKIE_HELPER_AVAILABLE:
+            # Try base64 encoded format first (from bookmarklet)
+            parsed = parse_cookie_export(cookie_input.strip())
+            if parsed:
+                cookies = cookies_to_playwright_state(parsed)
+                st.success(f"✅ Imported {len(parsed.get('cookies', []))} cookies from bookmarklet export")
             else:
-                # Basic parsing without helper
-                lines = cookie_input.strip().split('\n')
-                simple_cookies = []
-                for line in lines:
-                    if '=' in line:
-                        parts = line.strip().split('=', 1)
-                        simple_cookies.append({
-                            'name': parts[0].strip(),
-                            'value': parts[1].strip() if len(parts) > 1 else '',
-                            'domain': 'secure2.convio.net',
-                            'path': '/',
-                            'secure': True,
-                            'httpOnly': False,
-                        })
+                # Try simple name=value format
+                simple_cookies = parse_simple_cookie_paste(cookie_input)
                 if simple_cookies:
                     cookies = {'cookies': simple_cookies, 'origins': []}
-                    st.success(f"✅ Parsed {len(simple_cookies)} cookies")
+                    st.success(f"✅ Parsed {len(simple_cookies)} cookies - will try these first!")
                 else:
-                    st.error("❌ Could not parse cookies. Use format: name=value")
-        
-        # Store cookies in session state
-        st.session_state.imported_cookies = cookies
-        
-        # Show advanced bookmarklet option
-        if COOKIE_HELPER_AVAILABLE:
-            with st.expander("🔧 Advanced: Use Bookmarklet"):
-                st.markdown("""
-                For a more complete cookie export, you can use our bookmarklet:
-                
-                1. Create a new bookmark in your browser
-                2. Name it "Export Luminate Session"
-                3. Paste this code as the URL:
-                """)
-                
-                bookmarklet = get_cookie_extraction_bookmarklet()
-                st.code(bookmarklet, language="javascript")
-                
-                st.markdown("""
-                4. Go to any Luminate admin page while logged in
-                5. Click the bookmarklet
-                6. Copy the generated code and paste it above
-                """)
-        
-        # For cookie auth, we don't need username/password
-        username = None
-        password = None
-        
-    else:
-        # Traditional username/password authentication
-        st.markdown("---")
-        st.markdown("### 🔐 Enter Your Credentials")
-        
-        st.warning("""
-        ⚠️ **Note:** Logging in from our server may trigger Luminate's 2FA security.
-        For a smoother experience, consider using Cookie Passthrough above.
-        """)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            username = st.text_input(
-                "Username",
-                value=st.session_state.get('username', ''),
-                help="Your Luminate Online username (email address)"
-            )
-        with col2:
-            password = st.text_input(
-                "Password",
-                type="password",
-                value="",
-                help="Your Luminate Online password"
-            )
-        
-        # Check for saved session
-        has_saved_session = False
-        if username and LIBRARY_AVAILABLE:
-            try:
-                saved_state = load_browser_state(username)
-                has_saved_session = saved_state is not None
-            except:
-                has_saved_session = False
-        
-        # Show session status
-        if username:
-            if has_saved_session:
-                st.success("✅ Saved session found! You may be able to upload without 2FA.")
-                col_clear1, col_clear2 = st.columns([3, 1])
-                with col_clear1:
-                    st.caption("If you want to use a different account or refresh your session, clear it below.")
-                with col_clear2:
-                    if st.button("🗑️ Clear Session", key="clear_session", help="Clear saved session for this username"):
-                        try:
-                            if clear_browser_state(username):
-                                st.success("Session cleared!")
-                                st.rerun()
-                            else:
-                                st.warning("No session found to clear.")
-                        except Exception as e:
-                            st.error(f"Error clearing session: {str(e)}")
+                    st.error("❌ Could not parse cookies. Please check the format.")
+        else:
+            # Basic parsing without helper
+            lines = cookie_input.strip().split('\n')
+            simple_cookies = []
+            for line in lines:
+                if '=' in line:
+                    parts = line.strip().split('=', 1)
+                    simple_cookies.append({
+                        'name': parts[0].strip(),
+                        'value': parts[1].strip() if len(parts) > 1 else '',
+                        'domain': 'secure2.convio.net',
+                        'path': '/',
+                        'secure': True,
+                        'httpOnly': False,
+                    })
+            if simple_cookies:
+                cookies = {'cookies': simple_cookies, 'origins': []}
+                st.success(f"✅ Parsed {len(simple_cookies)} cookies - will try these first!")
             else:
-                st.info("ℹ️ No saved session found. You'll need to log in (2FA may be required).")
+                st.error("❌ Could not parse cookies. Use format: name=value")
     
-    # Step 2: File Upload
+    # Store cookies in session state
+    st.session_state.imported_cookies = cookies
+    
+    # Show auth strategy
+    if cookies:
+        st.caption("🔄 **Auth strategy:** Try cookies first → Fall back to username/password if cookies fail")
+    elif username and password:
+        st.caption("🔄 **Auth strategy:** Username/password login (may trigger 2FA)")
+    
+    # Show advanced bookmarklet option
+    if COOKIE_HELPER_AVAILABLE:
+        with st.expander("🔧 Advanced: Use Bookmarklet for Complete Cookie Export"):
+            st.markdown("""
+            For a more complete cookie export, you can use our bookmarklet:
+            
+            1. Create a new bookmark in your browser
+            2. Name it "Export Luminate Session"
+            3. Paste this code as the URL:
+            """)
+            
+            bookmarklet = get_cookie_extraction_bookmarklet()
+            st.code(bookmarklet, language="javascript")
+            
+            st.markdown("""
+            4. Go to any Luminate admin page while logged in
+            5. Click the bookmarklet
+            6. Copy the generated code and paste it above
+            """)
+    
+    # Step 3: File Upload
     st.markdown("---")
-    st.subheader("Step 2: Select Images to Upload")
+    st.subheader("Step 3: Select Images to Upload")
     
     uploaded_files = st.file_uploader(
         "Choose image files",
@@ -340,24 +315,20 @@ def main():
             for i, file in enumerate(uploaded_files, 1):
                 st.text(f"{i}. {file.name} ({file.size / 1024:.1f} KB)")
     
-    # Step 3: Upload Button
+    # Step 4: Upload Button
     st.markdown("---")
     
-    # Validate inputs based on auth method
-    if use_cookies:
-        # Cookie auth: need cookies and files
-        has_valid_auth = st.session_state.imported_cookies is not None
-        can_upload = playwright_available and has_valid_auth and uploaded_files and not st.session_state.uploading
-        auth_status = "cookies imported" if has_valid_auth else "cookies required"
-    else:
-        # Password auth: need username, password, and files
-        has_valid_auth = username and password
-        can_upload = playwright_available and has_valid_auth and uploaded_files and not st.session_state.uploading
-        auth_status = "credentials entered" if has_valid_auth else "credentials required"
+    # Validate inputs - need either cookies OR username/password
+    has_cookies = st.session_state.imported_cookies is not None
+    has_credentials = username and password
+    has_valid_auth = has_cookies or has_credentials
+    can_upload = playwright_available and has_valid_auth and uploaded_files and not st.session_state.uploading
     
     # Show auth status
     if not has_valid_auth:
-        st.warning(f"⚠️ Please complete Step 1 ({auth_status})")
+        st.warning("⚠️ Please provide authentication: either import cookies (Step 2) or enter username/password (Step 1)")
+    elif not uploaded_files:
+        st.info("📁 Select images to upload (Step 3)")
     
     if st.button(
         "🚀 Upload All Images",
@@ -365,12 +336,8 @@ def main():
         disabled=not can_upload,
         use_container_width=True
     ):
-        if use_cookies and not st.session_state.imported_cookies:
-            st.error("Please import your browser cookies first")
-            return
-        
-        if not use_cookies and (not username or not password):
-            st.error("Please enter your username and password")
+        if not has_valid_auth:
+            st.error("Please provide authentication (cookies or username/password)")
             return
         
         if not uploaded_files:
@@ -417,15 +384,34 @@ def main():
                 elif status == "error":
                     status_text.warning(f"⚠️ Failed {current}/{total}: {filename}")
             
-            # Upload images using appropriate auth method
-            if use_cookies:
-                status_text.info("🍪 Using your browser session (no login needed!)...")
+            results = None
+            
+            # Try cookies first if available
+            if has_cookies:
+                status_text.info("🍪 Trying browser session cookies (no login needed)...")
                 results = upload_images_with_cookies(
                     st.session_state.imported_cookies, 
                     image_paths, 
                     progress_callback
                 )
-            else:
+                
+                # Check if cookie auth failed (all uploads failed with session errors)
+                cookie_failed = False
+                if results['failed'] and not results['successful']:
+                    # Check if failures are session-related
+                    session_error_keywords = ['session', 'expired', 'invalid', 'login', 'cookie', 'authentication']
+                    for _, error in results['failed']:
+                        if any(keyword in error.lower() for keyword in session_error_keywords):
+                            cookie_failed = True
+                            break
+                
+                # Fall back to username/password if cookies failed and we have credentials
+                if cookie_failed and has_credentials:
+                    status_text.warning("🍪 Cookies expired or invalid. Falling back to username/password...")
+                    results = upload_images_batch(username, password, image_paths, progress_callback)
+            
+            # Use username/password if no cookies provided
+            elif has_credentials:
                 status_text.info("🔄 Logging in to Luminate Online...")
                 results = upload_images_batch(username, password, image_paths, progress_callback)
             
@@ -438,15 +424,13 @@ def main():
             status_text.empty()
             
             # Show results
-            display_results(results)
+            if results:
+                display_results(results)
             
         except Exception as e:
             st.session_state.uploading = False
             st.error(f"❌ An error occurred: {str(e)}")
-            if use_cookies:
-                st.info("Your session cookies may have expired. Please log into Luminate in your browser and export fresh cookies.")
-            else:
-                st.info("Please check your credentials and try again.")
+            st.info("Please check your cookies/credentials and try again. If cookies aren't working, try refreshing them from your browser.")
         finally:
             # Clean up temporary files
             for file_path in image_paths:
