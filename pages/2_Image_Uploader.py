@@ -13,7 +13,13 @@ import json
 
 # Lazy import to handle cases where luminate_uploader_lib might have issues
 try:
-    from luminate_uploader_lib import upload_images_batch, check_playwright_available
+    from luminate_uploader_lib import (
+        upload_images_batch, 
+        check_playwright_available,
+        load_browser_state,
+        clear_browser_state,
+        get_storage_state_path
+    )
     LIBRARY_AVAILABLE = True
 except ImportError as e:
     LIBRARY_AVAILABLE = False
@@ -121,7 +127,10 @@ def main():
     st.markdown("""
     <div class="info-box">
     <strong>Welcome!</strong> Upload multiple images to your Luminate Online Image Library in just a few clicks.
-    Your credentials are only used for this session and are never stored.
+    <br><br>
+    <strong>Session Management:</strong> After your first login (including 2FA), your session will be saved automatically. 
+    Future uploads will use the saved session, avoiding 2FA prompts. Your credentials are only used for authentication 
+    and are never stored permanently.
     </div>
     """, unsafe_allow_html=True)
     
@@ -140,8 +149,38 @@ def main():
             "Password",
             type="password",
             value="",
-            help="Your Luminate Online password"
+            help="Your Luminate Online password (only needed if no saved session exists)"
         )
+    
+    # Check for saved session
+    has_saved_session = False
+    if username and LIBRARY_AVAILABLE:
+        try:
+            saved_state = load_browser_state(username)
+            has_saved_session = saved_state is not None
+        except:
+            has_saved_session = False
+    
+    # Show session status
+    if username:
+        if has_saved_session:
+            st.success("✅ Saved session found! You can upload without logging in again (no 2FA needed).")
+            col_clear1, col_clear2 = st.columns([3, 1])
+            with col_clear1:
+                st.caption("If you want to use a different account or refresh your session, clear it below.")
+            with col_clear2:
+                if st.button("🗑️ Clear Session", key="clear_session", help="Clear saved session for this username"):
+                    try:
+                        if clear_browser_state(username):
+                            st.success("Session cleared!")
+                            st.rerun()
+                        else:
+                            st.warning("No session found to clear.")
+                    except Exception as e:
+                        st.error(f"Error clearing session: {str(e)}")
+        else:
+            st.info("ℹ️ No saved session found. You'll need to log in on first use (2FA may be required).")
+            st.caption("After successful login, your session will be saved automatically for future uploads.")
     
     # Step 2: File Upload
     st.markdown("---")

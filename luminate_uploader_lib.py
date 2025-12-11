@@ -13,6 +13,8 @@ import requests
 import subprocess
 import sys
 import shutil
+import json
+import hashlib
 
 # Playwright imports are lazy-loaded to prevent app crashes if dependencies are missing
 # Use _import_playwright() helper function to safely import Playwright when needed
@@ -54,13 +56,132 @@ def _import_playwright():
         ) from e
 
 
-def login(page, username, password):
+def get_storage_state_path(username):
+    """Generate secure file path for storing browser state.
+    
+    Args:
+        username: Username to generate path for
+        
+    Returns:
+        str: Path to storage state file
+    """
+    # Create a hash of the username for the filename (for security)
+    username_hash = hashlib.sha256(username.encode()).hexdigest()[:16]
+    
+    # Use temp directory for storage (works on both local and Cloud Run)
+    temp_dir = os.environ.get('TMPDIR', '/tmp')
+    if not os.path.exists(temp_dir):
+        temp_dir = '/tmp'
+    
+    # Create a subdirectory for our session files
+    session_dir = os.path.join(temp_dir, 'luminate_sessions')
+    os.makedirs(session_dir, mode=0o700, exist_ok=True)
+    
+    return os.path.join(session_dir, f'luminate_session_{username_hash}.json')
+
+
+def save_browser_state(context, username):
+    """Save browser context state to a file.
+    
+    Args:
+        context: Playwright browser context
+        username: Username associated with this session
+        
+    Returns:
+        str: Path to saved state file, or None if save failed
+    """
+    try:
+        state_path = get_storage_state_path(username)
+        context.storage_state(path=state_path)
+        
+        # Set secure permissions (user read/write only)
+        os.chmod(state_path, 0o600)
+        
+        return state_path
+    except Exception as e:
+        # Log error but don't fail the operation
+        print(f"Warning: Failed to save browser state: {str(e)}")
+        return None
+
+
+def load_browser_state(username):
+    """Load saved browser state if it exists.
+    
+    Args:
+        username: Username to load state for
+        
+    Returns:
+        dict or None: Browser state dictionary if file exists and is valid, None otherwise
+    """
+    try:
+        state_path = get_storage_state_path(username)
+        
+        if not os.path.exists(state_path):
+            return None
+        
+        # Check file permissions (should be 600)
+        file_stat = os.stat(state_path)
+        if file_stat.st_mode & 0o077 != 0:
+            # File has group/other permissions - consider it insecure, don't load
+            print(f"Warning: Session file has insecure permissions, ignoring: {state_path}")
+            return None
+        
+        # Load and validate JSON
+        with open(state_path, 'r') as f:
+            state = json.load(f)
+        
+        # Validate state structure
+        if not isinstance(state, dict) or 'cookies' not in state:
+            print(f"Warning: Invalid session state format, ignoring: {state_path}")
+            return None
+        
+        return state_path  # Return path, Playwright can load from path directly
+    except json.JSONDecodeError:
+        print(f"Warning: Corrupted session state file, ignoring: {state_path}")
+        return None
+    except Exception as e:
+        print(f"Warning: Failed to load browser state: {str(e)}")
+        return None
+
+
+def clear_browser_state(username):
+    """Clear saved browser state for a username.
+    
+    Args:
+        username: Username to clear state for
+        
+    Returns:
+        bool: True if state was cleared, False otherwise
+    """
+    try:
+        state_path = get_storage_state_path(username)
+        if os.path.exists(state_path):
+            os.remove(state_path)
+            return True
+        return False
+    except Exception as e:
+        print(f"Warning: Failed to clear browser state: {str(e)}")
+        return False
+
+
+def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300):
     """Log into Luminate Online with provided credentials.
     
-    Uses human-like behavior patterns to avoid triggering 2FA:
+    Uses human-like behavior patterns and handles 2FA:
     - Simulates realistic typing speed
     - Adds random delays between actions
+    - Detects 2FA prompts and waits for manual completion
     - Waits appropriately for page loads
+    
+    Args:
+        page: Playwright page object
+        username: Luminate username
+        password: Luminate password
+        wait_for_2fa: If True, wait for user to complete 2FA manually
+        max_2fa_wait_time: Maximum seconds to wait for 2FA completion (default 5 minutes)
+        
+    Returns:
+        bool: True if login successful, False otherwise
     """
     page.goto(LOGIN_URL)
     
@@ -103,6 +224,132 @@ def login(page, username, password):
     # Wait for navigation after login
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(2000)
+    
+    # Check if 2FA is required
+    if wait_for_2fa:
+        current_url = page.url
+        page_content = page.content().lower()
+        
+        # Check for 2FA indicators
+        two_factor_indicators = [
+            'two-factor',
+            '2fa',
+            'verification code',
+            'authenticator',
+            'security code',
+            'enter code',
+            'verify your identity'
+        ]
+        
+        has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
+        
+        # Also check if we're still on login page (might indicate 2FA or error)
+        still_on_login = 'AdminLogin' in current_url or 'login' in current_url.lower()
+        
+        if has_2fa_prompt or (still_on_login and 'error' not in page_content):
+            # Likely a 2FA prompt - wait for user to complete it manually
+            # Poll for successful authentication (check if we've navigated away from login/2FA page)
+            start_time = time.time()
+            while time.time() - start_time < max_2fa_wait_time:
+                page.wait_for_timeout(2000)  # Wait 2 seconds between checks
+                current_url = page.url
+                page_content = page.content().lower()
+                
+                # Check if we've successfully logged in (navigated away from login/2FA pages)
+                if 'AdminLogin' not in current_url and 'login' not in current_url.lower():
+                    # Check if we can see authenticated content
+                    try:
+                        # Try navigating to image library to confirm login
+                        page.goto(IMAGE_LIBRARY_URL, timeout=10000)
+                        page.wait_for_load_state("networkidle")
+                        page.wait_for_selector('text=Upload Image', timeout=5000)
+                        # Successfully authenticated!
+                        return True
+                    except:
+                        # Not fully authenticated yet, continue waiting
+                        pass
+                
+                # Check if 2FA prompt is still visible
+                still_has_2fa = any(indicator in page_content for indicator in two_factor_indicators)
+                if not still_has_2fa and 'AdminLogin' not in current_url:
+                    # 2FA prompt gone and not on login page - might be authenticated
+                    try:
+                        page.goto(IMAGE_LIBRARY_URL, timeout=10000)
+                        page.wait_for_load_state("networkidle")
+                        page.wait_for_selector('text=Upload Image', timeout=5000)
+                        return True
+                    except:
+                        pass
+            
+            # Timeout waiting for 2FA
+            return False
+    
+    # Verify login was successful by checking if we can access protected content
+    try:
+        page.goto(IMAGE_LIBRARY_URL, timeout=10000)
+        page.wait_for_load_state("networkidle")
+        page.wait_for_selector('text=Upload Image', timeout=5000)
+        return True
+    except:
+        return False
+
+
+def validate_session(page):
+    """Validate if the current session is still active and authenticated.
+    
+    Args:
+        page: Playwright page object
+        
+    Returns:
+        bool: True if session is valid, False if expired or invalid
+    """
+    try:
+        # Try to navigate to a protected page (Image Library)
+        page.goto(IMAGE_LIBRARY_URL, timeout=15000)
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(1000)
+        
+        # Check if we're redirected to login page
+        current_url = page.url
+        if 'AdminLogin' in current_url or 'login' in current_url.lower():
+            return False
+        
+        # Check for 2FA prompts
+        try:
+            # Look for common 2FA indicators
+            two_factor_indicators = [
+                'two-factor',
+                '2fa',
+                'verification code',
+                'authenticator',
+                'security code'
+            ]
+            page_text = page.content().lower()
+            for indicator in two_factor_indicators:
+                if indicator in page_text:
+                    # Might be a 2FA prompt, but could also be in page content
+                    # Check if we can see the Upload Image button (means we're logged in)
+                    try:
+                        page.wait_for_selector('text=Upload Image', timeout=3000)
+                        # If we can see Upload Image, we're logged in (2FA was just text on page)
+                        break
+                    except:
+                        # Can't see Upload Image, might be 2FA prompt
+                        return False
+        except:
+            pass
+        
+        # Check if we can see the Upload Image button (confirms we're logged in)
+        try:
+            page.wait_for_selector('text=Upload Image', timeout=5000)
+            return True
+        except:
+            # Can't find Upload Image button, session might be invalid
+            return False
+    except Exception as e:
+        # Any error during validation suggests session might be invalid
+        print(f"Session validation error: {str(e)}")
+        return False
 
 
 def navigate_to_image_library(page):
@@ -594,22 +841,26 @@ def upload_images_batch(username, password, image_paths, progress_callback=None)
                 else:
                     raise
             
-            # Create browser context with realistic settings to avoid 2FA triggers
-            # These settings make the browser appear more like a real user session
-            context = browser.new_context(
+            # Try to load saved browser state first
+            saved_state_path = load_browser_state(username)
+            session_valid = False
+            needs_login = True
+            
+            # Base context options
+            context_options = {
                 # Use a realistic user agent (Chrome on Windows)
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 # Set realistic viewport size (common desktop resolution)
-                viewport={'width': 1920, 'height': 1080},
+                'viewport': {'width': 1920, 'height': 1080},
                 # Set locale and timezone (US-based defaults)
-                locale='en-US',
-                timezone_id='America/New_York',
+                'locale': 'en-US',
+                'timezone_id': 'America/New_York',
                 # Set color scheme preference
-                color_scheme='light',
+                'color_scheme': 'light',
                 # Grant common permissions to appear more like a real browser
-                permissions=['geolocation'],
+                'permissions': ['geolocation'],
                 # Set extra HTTP headers that real browsers send
-                extra_http_headers={
+                'extra_http_headers': {
                     'Accept-Language': 'en-US,en;q=0.9',
                     'Accept-Encoding': 'gzip, deflate, br',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -620,7 +871,16 @@ def upload_images_batch(username, password, image_paths, progress_callback=None)
                     'Sec-Fetch-Site': 'none',
                     'Cache-Control': 'max-age=0',
                 }
-            )
+            }
+            
+            # If we have a saved state, try to use it
+            if saved_state_path:
+                context_options['storage_state'] = saved_state_path
+                if progress_callback:
+                    progress_callback(0, len(image_paths), "Loading saved session...", "info")
+            
+            # Create browser context with saved state (if available)
+            context = browser.new_context(**context_options)
             
             page = context.new_page()
             
@@ -657,15 +917,53 @@ def upload_images_batch(username, password, image_paths, progress_callback=None)
             """)
             
             try:
-                # Login
-                if progress_callback:
-                    progress_callback(0, len(image_paths), "Logging in...", "info")
-                login(page, username, password)
+                # If we have a saved state, validate it first
+                if saved_state_path:
+                    if progress_callback:
+                        progress_callback(0, len(image_paths), "Validating saved session...", "info")
+                    session_valid = validate_session(page)
+                    
+                    if session_valid:
+                        # Session is valid, skip login
+                        needs_login = False
+                        if progress_callback:
+                            progress_callback(0, len(image_paths), "Using saved session (no login needed)...", "info")
+                        # Navigate to Image Library
+                        navigate_to_image_library(page)
+                    else:
+                        # Session expired, clear it and login
+                        if progress_callback:
+                            progress_callback(0, len(image_paths), "Saved session expired, logging in...", "info")
+                        clear_browser_state(username)
+                        needs_login = True
                 
-                # Navigate to Image Library
-                if progress_callback:
-                    progress_callback(0, len(image_paths), "Navigating to Image Library...", "info")
-                navigate_to_image_library(page)
+                # Login if needed
+                if needs_login:
+                    if progress_callback:
+                        progress_callback(0, len(image_paths), "Logging in to Luminate Online...", "info")
+                    login_success = login(page, username, password, wait_for_2fa=True)
+                    
+                    if not login_success:
+                        # Login failed
+                        error_msg = "Login failed. Please check your credentials and try again."
+                        for image_path in image_paths:
+                            filename = os.path.basename(image_path)
+                            failed.append((filename, error_msg))
+                        return {
+                            'successful': successful,
+                            'failed': failed,
+                            'urls': urls
+                        }
+                    
+                    # Save browser state after successful login
+                    if progress_callback:
+                        progress_callback(0, len(image_paths), "Saving session for future use...", "info")
+                    save_browser_state(context, username)
+                    
+                    # Navigate to Image Library
+                    if progress_callback:
+                        progress_callback(0, len(image_paths), "Navigating to Image Library...", "info")
+                    navigate_to_image_library(page)
                 
                 # Upload each image
                 for i, image_path in enumerate(image_paths, 1):
