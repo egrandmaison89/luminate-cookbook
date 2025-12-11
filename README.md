@@ -10,6 +10,9 @@ Transform photos into perfectly-sized email banners with intelligent face detect
 ### 📤 Image Uploader
 Batch upload images directly to your Luminate Online Image Library with real-time progress tracking.
 
+### 🔍 PageBuilder Decomposer
+Extract all nested PageBuilders from a Luminate Online PageBuilder. Enter a URL or PageBuilder name and download all components as separate HTML files in a ZIP archive.
+
 ## 🚀 Quick Start
 
 ### Web App (Recommended for Teams)
@@ -42,7 +45,7 @@ pip install -r requirements.txt
 
 # Put your images in the 'originals/' folder
 # Then run:
-python process_banners.py
+python scripts/process_banners.py
 ```
 
 Output will be saved to the `resized/` folder.
@@ -51,7 +54,7 @@ Output will be saved to the `resized/` folder.
 ```bash
 # Set up credentials in .env file
 # Then run:
-python upload_to_luminate.py
+python scripts/upload_to_luminate.py
 ```
 
 ---
@@ -70,15 +73,26 @@ python upload_to_luminate.py
 ## 📁 Project Structure
 
 ```
-email_banners/
+luminate-cookbook/
 ├── app.py                    # Main entry point (Luminate Cookbook)
 ├── pages/                    # Multi-page app structure
 │   ├── 1_Email_Banner_Processor.py  # Email banner tool
-│   └── 2_Image_Uploader.py           # Image uploader tool
-├── luminate_uploader_lib.py  # Shared upload library
-├── process_banners.py        # CLI banner processing script
-├── upload_to_luminate.py     # CLI upload script
+│   ├── 2_Image_Uploader.py          # Image uploader tool
+│   └── 3_PageBuilder_Decomposer.py  # PageBuilder decomposer tool
+├── lib/                      # Shared libraries
+│   ├── luminate_uploader_lib.py      # Image upload library
+│   └── pagebuilder_decomposer_lib.py # PageBuilder decomposer library
+├── scripts/                  # CLI scripts
+│   ├── process_banners.py    # CLI banner processing script
+│   └── upload_to_luminate.py # CLI upload script
+├── tests/                    # Test scripts
+│   └── test_playwright.py   # Playwright test script
+├── docs/                     # Documentation
+│   ├── DEPLOYMENT.md        # Comprehensive deployment guide
+│   ├── GOOGLE_CLOUD_RUN.md  # Google Cloud Run specific guide
+│   └── TROUBLESHOOTING.md   # Troubleshooting guide
 ├── requirements.txt          # Python dependencies
+├── Dockerfile               # Docker configuration (for deployments)
 ├── README.md                 # This file
 ├── originals/                # Source images (for CLI)
 └── resized/                  # Output images (from CLI)
@@ -111,7 +125,7 @@ To add a new tool to the Luminate Cookbook:
 - **Filename Prefix**: Optional prefix for output files
 - **Retina versions**: On/Off
 
-### CLI Script Settings (edit `process_banners.py`)
+### CLI Script Settings (edit `scripts/process_banners.py`)
 ```python
 TARGET_WIDTH = 600
 TARGET_HEIGHT = 340
@@ -122,56 +136,21 @@ JPEG_QUALITY = 82
 
 ---
 
-## 🚀 Deploying to Streamlit Cloud (Free)
+## 🚀 Deployment
 
-### Standard Deployment (Email Banner Processor & PageBuilder Decomposer)
+For complete deployment instructions, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-1. **Create a GitHub repository** and push this folder
+### Quick Deploy to Streamlit Cloud
 
+1. **Push to GitHub** - Ensure all files are committed
 2. **Go to** [share.streamlit.io](https://share.streamlit.io)
-
 3. **Click "New app"** and select:
    - Your GitHub repo
    - Branch: `main`
    - Main file: `app.py`
-
 4. **Click Deploy!**
 
-5. **Share the URL** with your team (e.g., `https://your-app.streamlit.app`)
-
-### Image Uploader on Streamlit Cloud
-
-**⚠️ Important:** Streamlit Cloud doesn't support Dockerfiles. The Image Uploader requires Playwright system libraries.
-
-**Option 1: Try packages.txt**
-- A `packages.txt` file is included with required system packages
-- Streamlit Cloud will automatically use it during deployment
-- May work, but some packages might not be available
-
-**Option 2: Deploy to Google Cloud Run** ⭐ (Recommended)
-- Full Image Uploader functionality available
-- Free tier: 2 million requests/month
-- Easy deployment with included scripts
-- See [GOOGLE_CLOUD_RUN_DEPLOYMENT.md](GOOGLE_CLOUD_RUN_DEPLOYMENT.md) for complete guide
-
-**Option 3: Deploy to Other Platforms**
-- Railway, Fly.io, or other Docker-supporting platforms
-- See [STREAMLIT_CLOUD_ALTERNATIVES.md](STREAMLIT_CLOUD_ALTERNATIVES.md) for details
-
-**Option 3: Use Locally**
-- Image Uploader works perfectly when running locally
-- Deploy other tools to Streamlit Cloud
-- Use Image Uploader on your local machine
-
-See [STREAMLIT_CLOUD_ALTERNATIVES.md](STREAMLIT_CLOUD_ALTERNATIVES.md) for all options.
-
-Your teammates can now:
-- Visit the URL from any device
-- Navigate between tools using the sidebar
-- Use the Email Banner Processor to create optimized banners
-- Use the Image Uploader to batch upload to Luminate Online (requires Docker deployment)
-- Use the PageBuilder Decomposer to extract nested PageBuilders
-- Access all tools from a single unified interface
+**Note:** Streamlit Cloud doesn't support Dockerfiles, so the Image Uploader may have limited functionality. For full Image Uploader support, deploy to Google Cloud Run or another Docker-supporting platform. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for details.
 
 ---
 
@@ -189,6 +168,7 @@ Built by the Luminate team. The Luminate Cookbook provides a collection of tools
 **Current Tools:**
 - Email Banner Processor - Create optimized email banners with smart face detection
 - Image Uploader - Batch upload images to Luminate Online Image Library
+- PageBuilder Decomposer - Extract nested PageBuilders as separate HTML files
 
 **More tools coming soon!** 🎉
 

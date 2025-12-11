@@ -13,7 +13,7 @@ import json
 
 # Lazy import to handle cases where luminate_uploader_lib might have issues
 try:
-    from luminate_uploader_lib import (
+    from lib.luminate_uploader_lib import (
         upload_images_batch, 
         check_playwright_available,
         load_browser_state,

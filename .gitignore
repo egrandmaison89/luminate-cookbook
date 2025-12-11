@@ -45,3 +45,6 @@ uploaded_urls.txt
 .env
 .env.local
 .env.*.local
+
+# Google Cloud SDK (accidentally committed, should not be in repo)
+luminate-cookbook/

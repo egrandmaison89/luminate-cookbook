@@ -11,7 +11,7 @@ import zipfile
 import io
 import os
 from typing import Optional
-from pagebuilder_decomposer_lib import HierarchicalLuminateWorkflow
+from lib.pagebuilder_decomposer_lib import HierarchicalLuminateWorkflow
 
 
 def _safe_debug_log(data: dict):
