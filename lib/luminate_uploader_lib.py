@@ -13,6 +13,7 @@ Supports two authentication modes:
 import os
 import time
 import random
+import re
 import requests
 import subprocess
 import sys
@@ -31,6 +32,11 @@ BASE_URL = "https://danafarber.jimmyfund.org/images/content/pagebuilder/"
 # Authentication modes
 AUTH_MODE_LOGIN = "login"  # Traditional username/password (may trigger 2FA)
 AUTH_MODE_COOKIES = "cookies"  # Use pre-authenticated cookies (bypasses 2FA)
+
+
+class TwoFactorAuthRequired(Exception):
+    """Exception raised when 2FA is required during login."""
+    pass
 
 
 def is_streamlit_cloud():
@@ -172,24 +178,28 @@ def clear_browser_state(username):
         return False
 
 
-def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300):
+def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, two_factor_code=None):
     """Log into Luminate Online with provided credentials.
     
     Uses human-like behavior patterns and handles 2FA:
     - Simulates realistic typing speed
     - Adds random delays between actions
-    - Detects 2FA prompts and waits for manual completion
+    - Detects 2FA prompts and can accept a 2FA code
     - Waits appropriately for page loads
     
     Args:
         page: Playwright page object
         username: Luminate username
         password: Luminate password
-        wait_for_2fa: If True, wait for user to complete 2FA manually
+        wait_for_2fa: If True, wait for user to complete 2FA manually (deprecated, use two_factor_code instead)
         max_2fa_wait_time: Maximum seconds to wait for 2FA completion (default 5 minutes)
+        two_factor_code: Optional 6-digit 2FA code to submit automatically
         
     Returns:
-        bool: True if login successful, False otherwise
+        tuple: (success: bool, needs_2fa: bool, error: str or None)
+            - success: True if login successful
+            - needs_2fa: True if 2FA is required but no code was provided
+            - error: Error message if login failed, None otherwise
     """
     page.goto(LOGIN_URL)
     
@@ -234,72 +244,185 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300):
     page.wait_for_timeout(2000)
     
     # Check if 2FA is required
-    if wait_for_2fa:
-        current_url = page.url
-        page_content = page.content().lower()
-        
-        # Check for 2FA indicators
-        two_factor_indicators = [
-            'two-factor',
-            '2fa',
-            'verification code',
-            'authenticator',
-            'security code',
-            'enter code',
-            'verify your identity'
-        ]
-        
-        has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
-        
-        # Also check if we're still on login page (might indicate 2FA or error)
-        still_on_login = 'AdminLogin' in current_url or 'login' in current_url.lower()
-        
-        if has_2fa_prompt or (still_on_login and 'error' not in page_content):
-            # Likely a 2FA prompt - wait for user to complete it manually
-            # Poll for successful authentication (check if we've navigated away from login/2FA page)
-            start_time = time.time()
-            while time.time() - start_time < max_2fa_wait_time:
-                page.wait_for_timeout(2000)  # Wait 2 seconds between checks
-                current_url = page.url
-                page_content = page.content().lower()
+    current_url = page.url
+    page_content = page.content().lower()
+    
+    # Check for 2FA indicators
+    two_factor_indicators = [
+        'two-factor',
+        '2fa',
+        'verification code',
+        'authenticator',
+        'security code',
+        'enter code',
+        'verify your identity'
+    ]
+    
+    has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
+    
+    # Also check if we're still on login page (might indicate 2FA or error)
+    still_on_login = 'AdminLogin' in current_url or 'login' in current_url.lower()
+    
+    if has_2fa_prompt or (still_on_login and 'error' not in page_content):
+        # 2FA is required
+        if two_factor_code:
+            # We have a code, try to submit it
+            try:
+                # Wait a moment for the page to fully load
+                page.wait_for_timeout(1000)
                 
-                # Check if we've successfully logged in (navigated away from login/2FA pages)
-                if 'AdminLogin' not in current_url and 'login' not in current_url.lower():
-                    # Check if we can see authenticated content
-                    try:
-                        # Try navigating to image library to confirm login
-                        page.goto(IMAGE_LIBRARY_URL, timeout=10000)
-                        page.wait_for_load_state("networkidle")
-                        page.wait_for_selector('text=Upload Image', timeout=5000)
-                        # Successfully authenticated!
-                        return True
-                    except:
-                        # Not fully authenticated yet, continue waiting
-                        pass
+                # Try multiple strategies to find the 2FA input field
+                code_input = None
                 
-                # Check if 2FA prompt is still visible
-                still_has_2fa = any(indicator in page_content for indicator in two_factor_indicators)
-                if not still_has_2fa and 'AdminLogin' not in current_url:
-                    # 2FA prompt gone and not on login page - might be authenticated
+                # Strategy 1: Look for inputs with code-related attributes
+                try:
+                    potential_input = page.locator('input[name*="code" i], input[id*="code" i], input[name*="verify" i], input[id*="verify" i], input[name*="2fa" i], input[id*="2fa" i]').first
+                    if potential_input.count() > 0:
+                        code_input = potential_input
+                except:
+                    pass
+                
+                # Strategy 2: Look for text inputs (excluding username/password fields)
+                if not code_input:
                     try:
-                        page.goto(IMAGE_LIBRARY_URL, timeout=10000)
-                        page.wait_for_load_state("networkidle")
-                        page.wait_for_selector('text=Upload Image', timeout=5000)
-                        return True
+                        # Get all text inputs, filter out username/password
+                        all_inputs = page.locator('input[type="text"]')
+                        input_count = all_inputs.count()
+                        # Usually 2FA field is the first or only text input after login
+                        if input_count > 0:
+                            code_input = all_inputs.first
                     except:
                         pass
+                
+                # Strategy 3: Use role-based selector for textbox
+                if not code_input:
+                    try:
+                        code_input = page.get_by_role("textbox").first
+                    except:
+                        pass
+                
+                if code_input and code_input.count() > 0:
+                    # Found the input field, enter the code
+                    code_input.click()
+                    page.wait_for_timeout(200)
+                    code_input.clear()
+                    
+                    # Type the code character by character (human-like)
+                    for char in str(two_factor_code):
+                        code_input.type(char, delay=random.randint(50, 150))
+                    
+                    page.wait_for_timeout(500)
+                    
+                    # Try to find and click submit button
+                    submit_button = None
+                    try:
+                        # Try common submit button selectors
+                        submit_button = page.locator('button[type="submit"], input[type="submit"], button:has-text("Submit"), button:has-text("Verify"), button:has-text("Continue")').first
+                        if submit_button.count() == 0:
+                            # Try role-based
+                            submit_button = page.get_by_role("button", name=re.compile("submit|verify|continue", re.I)).first
+                    except:
+                        pass
+                    
+                    if submit_button and submit_button.count() > 0:
+                        submit_button.click()
+                    else:
+                        # Fallback: try pressing Enter
+                        code_input.press("Enter")
+                    
+                    # Wait for navigation
+                    page.wait_for_load_state("networkidle")
+                    page.wait_for_timeout(2000)
+                    
+                    # Verify authentication was successful
+                    current_url = page.url
+                    if 'AdminLogin' not in current_url and 'login' not in current_url.lower():
+                        # Check if we can access protected content
+                        try:
+                            page.goto(IMAGE_LIBRARY_URL, timeout=10000)
+                            page.wait_for_load_state("networkidle")
+                            page.wait_for_selector('text=Upload Image', timeout=5000)
+                            return (True, False, None)
+                        except:
+                            # Might still be authenticating, check again
+                            page.wait_for_timeout(2000)
+                            current_url = page.url
+                            if 'AdminLogin' not in current_url and 'login' not in current_url.lower():
+                                try:
+                                    page.wait_for_selector('text=Upload Image', timeout=5000)
+                                    return (True, False, None)
+                                except:
+                                    pass
+                    
+                    # Check if 2FA prompt is still there (code might be invalid)
+                    page_content = page.content().lower()
+                    still_has_2fa = any(indicator in page_content for indicator in two_factor_indicators)
+                    if still_has_2fa:
+                        return (False, True, "Invalid 2FA code. Please try again.")
+                    else:
+                        # 2FA prompt gone, verify we're logged in
+                        try:
+                            page.goto(IMAGE_LIBRARY_URL, timeout=10000)
+                            page.wait_for_load_state("networkidle")
+                            page.wait_for_selector('text=Upload Image', timeout=5000)
+                            return (True, False, None)
+                        except:
+                            return (False, True, "2FA code submitted but authentication verification failed.")
+                else:
+                    return (False, True, "Could not find 2FA input field on the page.")
+                    
+            except Exception as e:
+                return (False, True, f"Error submitting 2FA code: {str(e)}")
+        else:
+            # No code provided, return needs_2fa=True
+            return (False, True, None)
+    
+    # If wait_for_2fa is True and we're using the old behavior, wait manually
+    if wait_for_2fa and not two_factor_code:
+        # Old behavior: wait for manual completion
+        start_time = time.time()
+        while time.time() - start_time < max_2fa_wait_time:
+            page.wait_for_timeout(2000)  # Wait 2 seconds between checks
+            current_url = page.url
+            page_content = page.content().lower()
             
-            # Timeout waiting for 2FA
-            return False
+            # Check if we've successfully logged in (navigated away from login/2FA pages)
+            if 'AdminLogin' not in current_url and 'login' not in current_url.lower():
+                # Check if we can see authenticated content
+                try:
+                    # Try navigating to image library to confirm login
+                    page.goto(IMAGE_LIBRARY_URL, timeout=10000)
+                    page.wait_for_load_state("networkidle")
+                    page.wait_for_selector('text=Upload Image', timeout=5000)
+                    # Successfully authenticated!
+                    return (True, False, None)
+                except:
+                    # Not fully authenticated yet, continue waiting
+                    pass
+            
+            # Check if 2FA prompt is still visible
+            still_has_2fa = any(indicator in page_content for indicator in two_factor_indicators)
+            if not still_has_2fa and 'AdminLogin' not in current_url:
+                # 2FA prompt gone and not on login page - might be authenticated
+                try:
+                    page.goto(IMAGE_LIBRARY_URL, timeout=10000)
+                    page.wait_for_load_state("networkidle")
+                    page.wait_for_selector('text=Upload Image', timeout=5000)
+                    return (True, False, None)
+                except:
+                    pass
+        
+        # Timeout waiting for 2FA
+        return (False, True, "Timeout waiting for 2FA completion.")
     
     # Verify login was successful by checking if we can access protected content
     try:
         page.goto(IMAGE_LIBRARY_URL, timeout=10000)
         page.wait_for_load_state("networkidle")
         page.wait_for_selector('text=Upload Image', timeout=5000)
-        return True
-    except:
-        return False
+        return (True, False, None)
+    except Exception as e:
+        return (False, False, f"Login verification failed: {str(e)}")
 
 
 def validate_session(page):
@@ -718,7 +841,7 @@ def ensure_playwright_browsers_installed(progress_callback=None):
             raise
 
 
-def upload_images_batch(username, password, image_paths, progress_callback=None):
+def upload_images_batch(username, password, image_paths, progress_callback=None, two_factor_code=None):
     """Upload multiple images to Luminate Online.
     
     Args:
@@ -726,6 +849,7 @@ def upload_images_batch(username, password, image_paths, progress_callback=None)
         password: Luminate password
         image_paths: List of paths to image files
         progress_callback: Optional callback function(current, total, filename, status)
+        two_factor_code: Optional 6-digit 2FA code if 2FA is required
         
     Returns:
         dict: {
@@ -733,6 +857,9 @@ def upload_images_batch(username, password, image_paths, progress_callback=None)
             'failed': list of (filename, error) tuples,
             'urls': list of URLs for successful uploads
         }
+        
+    Raises:
+        TwoFactorAuthRequired: If 2FA is required but no code was provided
     """
     successful = []
     failed = []
@@ -949,11 +1076,16 @@ def upload_images_batch(username, password, image_paths, progress_callback=None)
                 if needs_login:
                     if progress_callback:
                         progress_callback(0, len(image_paths), "Logging in to Luminate Online...", "info")
-                    login_success = login(page, username, password, wait_for_2fa=True)
+                    
+                    login_success, needs_2fa, login_error = login(page, username, password, wait_for_2fa=False, two_factor_code=two_factor_code)
+                    
+                    if needs_2fa:
+                        # 2FA is required - raise exception so UI can handle it
+                        raise TwoFactorAuthRequired("Two-factor authentication is required. Please enter your 6-digit code.")
                     
                     if not login_success:
                         # Login failed
-                        error_msg = "Login failed. Please check your credentials and try again."
+                        error_msg = login_error or "Login failed. Please check your credentials and try again."
                         for image_path in image_paths:
                             filename = os.path.basename(image_path)
                             failed.append((filename, error_msg))

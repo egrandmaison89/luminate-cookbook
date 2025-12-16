@@ -24,7 +24,8 @@ try:
         check_playwright_available,
         load_browser_state,
         clear_browser_state,
-        get_storage_state_path
+        get_storage_state_path,
+        TwoFactorAuthRequired
     )
     LIBRARY_AVAILABLE = True
 except ImportError as e:
@@ -97,6 +98,20 @@ if 'upload_results' not in st.session_state:
     st.session_state.upload_results = None
 if 'uploading' not in st.session_state:
     st.session_state.uploading = False
+if 'needs_2fa' not in st.session_state:
+    st.session_state.needs_2fa = False
+if 'two_factor_code' not in st.session_state:
+    st.session_state.two_factor_code = None
+if 'pending_upload_files' not in st.session_state:
+    st.session_state.pending_upload_files = None
+if 'pending_username' not in st.session_state:
+    st.session_state.pending_username = None
+if 'pending_password' not in st.session_state:
+    st.session_state.pending_password = None
+if 'pending_cookies' not in st.session_state:
+    st.session_state.pending_cookies = None
+if '2fa_error' not in st.session_state:
+    st.session_state['2fa_error'] = None
 
 
 def main():
@@ -175,6 +190,50 @@ def main():
             value="",
             help="Your Luminate Online password"
         )
+    
+    # 2FA Input Section (shown when 2FA is required)
+    if st.session_state.needs_2fa:
+        st.markdown("---")
+        st.markdown("""
+        <div style="padding: 1em; background-color: #fff3cd; border-radius: 5px; border: 1px solid #ffc107; margin: 1em 0;">
+        <strong>🔐 Two-Factor Authentication Required</strong><br><br>
+        Please enter the 6-digit verification code sent to your phone or authenticator app.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col_code, col_submit = st.columns([2, 1])
+        with col_code:
+            two_factor_input = st.text_input(
+                "Enter 6-digit code",
+                value=st.session_state.two_factor_code or "",
+                max_chars=6,
+                key="2fa_input",
+                help="Enter the 6-digit code from your text message or authenticator app"
+            )
+        with col_submit:
+            st.markdown("<br>", unsafe_allow_html=True)  # Spacing
+            submit_2fa = st.button("Submit Code", type="primary", use_container_width=True, key="submit_2fa")
+        
+        # Show error if any
+        if st.session_state.get('2fa_error'):
+            st.error(st.session_state['2fa_error'])
+        
+        # Validate and handle 2FA code submission
+        if submit_2fa:
+            # Validate code format
+            if not two_factor_input or len(two_factor_input) != 6 or not two_factor_input.isdigit():
+                st.session_state['2fa_error'] = "Please enter a valid 6-digit code."
+                st.rerun()
+            else:
+                # Store code and clear error
+                st.session_state.two_factor_code = two_factor_input
+                st.session_state['2fa_error'] = None
+                # Automatically retry upload if we have pending files
+                if st.session_state.pending_upload_files:
+                    st.session_state.uploading = True
+                    st.rerun()
+                else:
+                    st.rerun()
     
     # Check for saved session
     has_saved_session = False
@@ -319,33 +378,55 @@ def main():
     st.markdown("---")
     
     # Validate inputs - need either cookies OR username/password
-    has_cookies = st.session_state.imported_cookies is not None
-    has_credentials = username and password
+    # Use pending credentials if available (for 2FA retry)
+    active_username = st.session_state.pending_username if st.session_state.pending_username else username
+    active_password = st.session_state.pending_password if st.session_state.pending_password else password
+    active_cookies = st.session_state.pending_cookies if st.session_state.pending_cookies is not None else st.session_state.imported_cookies
+    
+    has_cookies = active_cookies is not None
+    has_credentials = active_username and active_password
     has_valid_auth = has_cookies or has_credentials
-    can_upload = playwright_available and has_valid_auth and uploaded_files and not st.session_state.uploading
+    can_upload = playwright_available and has_valid_auth and (uploaded_files or st.session_state.pending_upload_files) and not st.session_state.uploading
     
     # Show auth status
     if not has_valid_auth:
         st.warning("⚠️ Please provide authentication: either import cookies (Step 2) or enter username/password (Step 1)")
-    elif not uploaded_files:
+    elif not uploaded_files and not st.session_state.pending_upload_files:
         st.info("📁 Select images to upload (Step 3)")
+    
+    # Auto-retry upload if we have 2FA code and pending files
+    should_auto_retry = (
+        st.session_state.needs_2fa and 
+        st.session_state.two_factor_code and 
+        st.session_state.pending_upload_files and 
+        not st.session_state.uploading
+    )
+    
+    # Use pending files if available (for 2FA retry), otherwise use current uploaded files
+    files_to_upload = st.session_state.pending_upload_files if st.session_state.pending_upload_files else uploaded_files
     
     if st.button(
         "🚀 Upload All Images",
         type="primary",
-        disabled=not can_upload,
+        disabled=not (playwright_available and has_valid_auth and files_to_upload and not st.session_state.uploading),
         use_container_width=True
-    ):
+    ) or should_auto_retry:
         if not has_valid_auth:
             st.error("Please provide authentication (cookies or username/password)")
             return
         
-        if not uploaded_files:
+        if not files_to_upload:
             st.error("Please select at least one image to upload")
             return
         
-        # Clear previous results to prevent caching
-        st.session_state.upload_results = None
+        # Clear previous results to prevent caching (unless retrying with 2FA)
+        if not should_auto_retry:
+            st.session_state.upload_results = None
+        
+        # Clear 2FA state when starting a new upload (unless we're retrying with a code)
+        if not st.session_state.two_factor_code:
+            st.session_state.needs_2fa = False
+            st.session_state['2fa_error'] = None
         
         # Store username in session state (if provided)
         if username:
@@ -355,16 +436,30 @@ def main():
         st.session_state.uploading = True
         
         # Save uploaded files to temporary directory
-        temp_dir = tempfile.mkdtemp()
+        # Use a persistent temp directory stored in session state for 2FA retries
+        if 'upload_temp_dir' not in st.session_state or not st.session_state.upload_temp_dir:
+            temp_dir = tempfile.mkdtemp()
+            st.session_state.upload_temp_dir = temp_dir
+        else:
+            temp_dir = st.session_state.upload_temp_dir
+        
         image_paths = []
         
         try:
-            for uploaded_file in uploaded_files:
-                # Save file to temp directory
-                file_path = os.path.join(temp_dir, uploaded_file.name)
-                with open(file_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                image_paths.append(file_path)
+            # Use pending file paths if available (for 2FA retry), otherwise save current uploaded files
+            if st.session_state.pending_upload_files:
+                # Use stored file paths from previous attempt
+                image_paths = st.session_state.pending_upload_files
+            else:
+                # Save current uploaded files
+                for uploaded_file in files_to_upload:
+                    # Save file to temp directory
+                    file_path = os.path.join(temp_dir, uploaded_file.name)
+                    with open(file_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    image_paths.append(file_path)
+                # Store file paths for potential 2FA retry
+                st.session_state.pending_upload_files = image_paths
             
             # Create progress tracking
             progress_bar = st.progress(0)
@@ -389,8 +484,9 @@ def main():
             # Try cookies first if available
             if has_cookies:
                 status_text.info("🍪 Trying browser session cookies (no login needed)...")
+                cookies_to_use = active_cookies or st.session_state.imported_cookies
                 results = upload_images_with_cookies(
-                    st.session_state.imported_cookies, 
+                    cookies_to_use, 
                     image_paths, 
                     progress_callback
                 )
@@ -408,16 +504,78 @@ def main():
                 # Fall back to username/password if cookies failed and we have credentials
                 if cookie_failed and has_credentials:
                     status_text.warning("🍪 Cookies expired or invalid. Falling back to username/password...")
-                    results = upload_images_batch(username, password, image_paths, progress_callback)
+                    try:
+                        # Use pending credentials if available (for 2FA retry)
+                        login_username = st.session_state.pending_username or username
+                        login_password = st.session_state.pending_password or password
+                        results = upload_images_batch(
+                            login_username, 
+                            login_password, 
+                            image_paths, 
+                            progress_callback,
+                            two_factor_code=st.session_state.two_factor_code
+                        )
+                    except TwoFactorAuthRequired:
+                        # 2FA required - stop upload and show input field
+                        # Store credentials for retry (files already stored in image_paths)
+                        st.session_state.pending_username = active_username
+                        st.session_state.pending_password = active_password
+                        st.session_state.pending_cookies = active_cookies
+                        st.session_state.uploading = False
+                        st.session_state.needs_2fa = True
+                        progress_bar.empty()
+                        status_text.empty()
+                        st.warning("🔐 Two-factor authentication is required. Please enter your 6-digit code above.")
+                        return
             
             # Use username/password if no cookies provided
             elif has_credentials:
                 status_text.info("🔄 Logging in to Luminate Online...")
-                results = upload_images_batch(username, password, image_paths, progress_callback)
+                try:
+                    # Use pending credentials if available (for 2FA retry)
+                    login_username = st.session_state.pending_username or username
+                    login_password = st.session_state.pending_password or password
+                    results = upload_images_batch(
+                        login_username, 
+                        login_password, 
+                        image_paths, 
+                        progress_callback,
+                        two_factor_code=st.session_state.two_factor_code
+                    )
+                except TwoFactorAuthRequired:
+                    # 2FA required - stop upload and show input field
+                    # Store credentials for retry (files already stored in image_paths)
+                    st.session_state.pending_username = active_username
+                    st.session_state.pending_password = active_password
+                    st.session_state.pending_cookies = active_cookies
+                    st.session_state.uploading = False
+                    st.session_state.needs_2fa = True
+                    progress_bar.empty()
+                    status_text.empty()
+                    st.warning("🔐 Two-factor authentication is required. Please enter your 6-digit code above.")
+                    return
             
             # Store results
             st.session_state.upload_results = results
             st.session_state.uploading = False
+            
+            # Clear 2FA state and pending files on successful upload
+            if results and (results.get('successful') or not results.get('failed')):
+                st.session_state.needs_2fa = False
+                st.session_state.two_factor_code = None
+                st.session_state.pending_upload_files = None
+                st.session_state.pending_username = None
+                st.session_state.pending_password = None
+                st.session_state.pending_cookies = None
+                st.session_state['2fa_error'] = None
+                # Clean up temp directory
+                if 'upload_temp_dir' in st.session_state and st.session_state.upload_temp_dir:
+                    try:
+                        import shutil
+                        shutil.rmtree(st.session_state.upload_temp_dir, ignore_errors=True)
+                    except:
+                        pass
+                    st.session_state.upload_temp_dir = None
             
             # Clear progress indicators
             progress_bar.empty()
@@ -432,16 +590,25 @@ def main():
             st.error(f"❌ An error occurred: {str(e)}")
             st.info("Please check your cookies/credentials and try again. If cookies aren't working, try refreshing them from your browser.")
         finally:
-            # Clean up temporary files
-            for file_path in image_paths:
-                try:
-                    os.remove(file_path)
-                except:
-                    pass
-            try:
-                os.rmdir(temp_dir)
-            except:
-                pass
+            # Only clean up temporary files if upload completed successfully or failed (not if 2FA is pending)
+            if not st.session_state.needs_2fa:
+                # Clean up temporary files
+                for file_path in image_paths:
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                    except:
+                        pass
+                # Clean up temp directory if we're done
+                if 'upload_temp_dir' in st.session_state and st.session_state.upload_temp_dir:
+                    try:
+                        import shutil
+                        if os.path.exists(st.session_state.upload_temp_dir):
+                            shutil.rmtree(st.session_state.upload_temp_dir, ignore_errors=True)
+                    except:
+                        pass
+                    st.session_state.upload_temp_dir = None
+                    st.session_state.pending_upload_files = None
     
     # Display results only if we just completed an upload (not from cache)
     if st.session_state.upload_results and not st.session_state.uploading:
