@@ -193,11 +193,14 @@ def main():
     
     # 2FA Input Section (shown when 2FA is required)
     if st.session_state.needs_2fa:
+        # Make it VERY prominent
+        st.error("🔐 **TWO-FACTOR AUTHENTICATION REQUIRED**")
         st.markdown("---")
         st.markdown("""
-        <div style="padding: 1em; background-color: #fff3cd; border-radius: 5px; border: 1px solid #ffc107; margin: 1em 0;">
+        <div style="padding: 1.5em; background-color: #fff3cd; border-radius: 5px; border: 3px solid #ffc107; margin: 1em 0; font-size: 1.1em;">
         <strong>🔐 Two-Factor Authentication Required</strong><br><br>
-        Please enter the 6-digit verification code sent to your phone or authenticator app.
+        Luminate has sent a 6-digit verification code to your phone.<br>
+        <strong>Please enter the code below to continue with the upload.</strong>
         </div>
         """, unsafe_allow_html=True)
         
@@ -208,7 +211,8 @@ def main():
                 value=st.session_state.two_factor_code or "",
                 max_chars=6,
                 key="2fa_input",
-                help="Enter the 6-digit code from your text message or authenticator app"
+                help="Enter the 6-digit code from your text message",
+                placeholder="000000"
             )
         with col_submit:
             st.markdown("<br>", unsafe_allow_html=True)  # Spacing
@@ -525,8 +529,7 @@ def main():
                         st.session_state.needs_2fa = True
                         progress_bar.empty()
                         status_text.empty()
-                        st.warning("🔐 Two-factor authentication is required. Please enter your 6-digit code above.")
-                        return
+                        st.rerun()  # Rerun to show 2FA input field
             
             # Use username/password if no cookies provided
             elif has_credentials:
@@ -552,8 +555,7 @@ def main():
                     st.session_state.needs_2fa = True
                     progress_bar.empty()
                     status_text.empty()
-                    st.warning("🔐 Two-factor authentication is required. Please enter your 6-digit code above.")
-                    return
+                    st.rerun()  # Rerun to show 2FA input field
             
             # Store results
             st.session_state.upload_results = results
