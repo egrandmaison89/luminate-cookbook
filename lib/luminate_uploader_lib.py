@@ -1125,6 +1125,9 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
                         if progress_callback:
                             progress_callback(i, len(image_paths), filename, "error")
             
+            except TwoFactorAuthRequired:
+                # Re-raise 2FA exception so UI can handle it
+                raise
             except Exception as e:
                 # If login or navigation fails, mark all as failed
                 for image_path in image_paths:

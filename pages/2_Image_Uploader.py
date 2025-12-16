@@ -587,6 +587,9 @@ def main():
             if results:
                 display_results(results)
             
+        except TwoFactorAuthRequired:
+            # Re-raise 2FA exception so it can be handled by specific handlers above
+            raise
         except Exception as e:
             st.session_state.uploading = False
             st.error(f"❌ An error occurred: {str(e)}")
