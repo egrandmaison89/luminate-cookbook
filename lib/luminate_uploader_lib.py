@@ -1147,6 +1147,9 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
         for image_path in image_paths:
             filename = os.path.basename(image_path)
             failed.append((filename, error_msg))
+    except TwoFactorAuthRequired:
+        # Re-raise 2FA exception so UI can handle it (don’t wrap as “Browser launch error”)
+        raise
     except Exception as e:
         # Catch any other unexpected errors during browser launch
         error_msg = f"Browser launch error: {str(e)}"
