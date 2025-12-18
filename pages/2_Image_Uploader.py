@@ -95,6 +95,8 @@ if '2fa_error' not in st.session_state:
     st.session_state['2fa_error'] = None
 if 'upload_temp_dir' not in st.session_state:
     st.session_state.upload_temp_dir = None
+if 'browser_session_key' not in st.session_state:
+    st.session_state.browser_session_key = None
 
 
 def main():
@@ -410,16 +412,27 @@ def main():
             try:
                 login_username = active_username
                 login_password = active_password or ""
+                # Use existing session key if available (for 2FA retry), otherwise generate new one
+                if should_auto_retry and st.session_state.browser_session_key:
+                    session_key = st.session_state.browser_session_key
+                else:
+                    # Generate new session key for new upload
+                    from lib.luminate_uploader_lib import generate_session_key
+                    session_key = generate_session_key(login_username)
+                    st.session_state.browser_session_key = session_key
+                
                 results = upload_images_batch(
                     login_username,
                     login_password,
                     image_paths,
                     progress_callback,
-                    two_factor_code=st.session_state.two_factor_code
+                    two_factor_code=st.session_state.two_factor_code,
+                    session_key=session_key
                 )
             except TwoFactorAuthRequired:
                 # 2FA required - stop upload and show input field
                 # Store credentials for retry (files already stored in image_paths)
+                # Browser session is kept alive - session_key is already stored
                 st.session_state.pending_username = active_username
                 st.session_state.pending_password = active_password
                 st.session_state.uploading = False
@@ -440,6 +453,8 @@ def main():
                 st.session_state.pending_username = None
                 st.session_state.pending_password = None
                 st.session_state['2fa_error'] = None
+                # Clean up browser session key (browser session is already closed by upload function)
+                st.session_state.browser_session_key = None
                 # Clean up temp directory
                 if 'upload_temp_dir' in st.session_state and st.session_state.upload_temp_dir:
                     try:
@@ -459,6 +474,9 @@ def main():
             
         except Exception as e:
             st.session_state.uploading = False
+            # Clean up browser session key on error (unless it's a 2FA exception, which is handled above)
+            if not isinstance(e, TwoFactorAuthRequired):
+                st.session_state.browser_session_key = None
             st.error(f"❌ An error occurred: {str(e)}")
             st.info("Please check your cookies/credentials and try again. If cookies aren't working, try refreshing them from your browser.")
         finally:

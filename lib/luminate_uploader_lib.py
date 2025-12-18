@@ -33,10 +33,114 @@ BASE_URL = "https://danafarber.jimmyfund.org/images/content/pagebuilder/"
 AUTH_MODE_LOGIN = "login"  # Traditional username/password (may trigger 2FA)
 AUTH_MODE_COOKIES = "cookies"  # Use pre-authenticated cookies (bypasses 2FA)
 
+# Global dictionary to store active browser sessions for 2FA retry
+# Key: session_key (str), Value: dict with browser, context, page, created_at, username
+_active_browser_sessions = {}
+_session_lock = None  # Will be initialized if threading is needed
+
+# Session expiration time (10 minutes)
+SESSION_EXPIRATION_SECONDS = 600
+
 
 class TwoFactorAuthRequired(Exception):
     """Exception raised when 2FA is required during login."""
     pass
+
+
+def generate_session_key(username):
+    """Generate a unique session key for browser session storage.
+    
+    Args:
+        username: Username to include in the key
+        
+    Returns:
+        str: Unique session key
+    """
+    timestamp = int(time.time() * 1000)  # milliseconds
+    username_hash = hashlib.md5(username.encode()).hexdigest()[:8]
+    return f"{username_hash}_{timestamp}"
+
+
+def create_browser_session(session_key, browser, context, page, username, playwright_instance=None):
+    """Store a browser session in the global dictionary.
+    
+    Args:
+        session_key: Unique key for this session
+        browser: Playwright browser object
+        context: Browser context object
+        page: Page object
+        username: Username associated with this session
+        playwright_instance: Optional Playwright instance (needed for cleanup)
+    """
+    _active_browser_sessions[session_key] = {
+        "browser": browser,
+        "context": context,
+        "page": page,
+        "playwright_instance": playwright_instance,
+        "created_at": time.time(),
+        "username": username
+    }
+
+
+def get_browser_session(session_key):
+    """Retrieve a browser session from the global dictionary.
+    
+    Args:
+        session_key: Unique key for the session
+        
+    Returns:
+        dict or None: Session dict with browser, context, page, etc., or None if not found
+    """
+    if session_key in _active_browser_sessions:
+        session = _active_browser_sessions[session_key]
+        # Check if session has expired
+        if time.time() - session["created_at"] > SESSION_EXPIRATION_SECONDS:
+            # Session expired, cleanup
+            cleanup_session(session_key)
+            return None
+        return session
+    return None
+
+
+def cleanup_session(session_key):
+    """Clean up and remove a browser session.
+    
+    Args:
+        session_key: Unique key for the session
+    """
+    if session_key in _active_browser_sessions:
+        session = _active_browser_sessions[session_key]
+        try:
+            # Try to close browser gracefully
+            if "browser" in session and session["browser"]:
+                try:
+                    session["browser"].close()
+                except:
+                    pass
+            # Stop playwright instance if it exists
+            if "playwright_instance" in session and session["playwright_instance"]:
+                try:
+                    session["playwright_instance"].stop()
+                except:
+                    pass
+        except:
+            pass
+        finally:
+            # Remove from dictionary
+            del _active_browser_sessions[session_key]
+
+
+def cleanup_expired_sessions():
+    """Clean up all expired browser sessions."""
+    current_time = time.time()
+    expired_keys = []
+    
+    for session_key, session in _active_browser_sessions.items():
+        if current_time - session["created_at"] > SESSION_EXPIRATION_SECONDS:
+            expired_keys.append(session_key)
+    
+    for key in expired_keys:
+        cleanup_session(key)
 
 
 def is_streamlit_cloud():
@@ -872,7 +976,7 @@ def ensure_playwright_browsers_installed(progress_callback=None):
             raise
 
 
-def upload_images_batch(username, password, image_paths, progress_callback=None, two_factor_code=None):
+def upload_images_batch(username, password, image_paths, progress_callback=None, two_factor_code=None, session_key=None):
     """Upload multiple images to Luminate Online.
     
     Args:
@@ -881,6 +985,7 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
         image_paths: List of paths to image files
         progress_callback: Optional callback function(current, total, filename, status)
         two_factor_code: Optional 6-digit 2FA code if 2FA is required
+        session_key: Optional session key to reuse an existing browser session (for 2FA retry)
         
     Returns:
         dict: {
@@ -948,6 +1053,22 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
             'urls': urls
         }
     
+    # Clean up expired sessions periodically
+    cleanup_expired_sessions()
+    
+    # Check if we have an existing browser session to reuse
+    existing_session = None
+    reuse_session = False
+    if session_key:
+        existing_session = get_browser_session(session_key)
+        if existing_session:
+            reuse_session = True
+            browser = existing_session["browser"]
+            context = existing_session["context"]
+            page = existing_session["page"]
+            if progress_callback:
+                progress_callback(0, len(image_paths), "Reusing existing browser session...", "info")
+    
     # Lazy import Playwright
     try:
         sync_playwright, _, PlaywrightError = _import_playwright()
@@ -962,11 +1083,24 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
             'urls': urls
         }
     
+    # Generate session key if not provided
+    if not session_key:
+        session_key = generate_session_key(username)
+    
+    playwright_instance = None
+    browser_created = False
+    keep_browser_alive = False  # Flag to track if we should keep browser alive for 2FA retry
+    
     try:
-        with sync_playwright() as p:
+        # If reusing session, we don't need to create playwright instance
+        if not reuse_session:
+            playwright_instance = sync_playwright().start()
+        
+        if not reuse_session:
             # Launch browser in headless mode (better for web apps)
             try:
-                browser = p.chromium.launch(headless=True)
+                browser = playwright_instance.chromium.launch(headless=True)
+                browser_created = True
             except PlaywrightError as e:
                 error_str = str(e)
                 error_lower = error_str.lower()
@@ -1050,6 +1184,9 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
             
             page = context.new_page()
             
+            # Store the browser session for potential 2FA retry
+            create_browser_session(session_key, browser, context, page, username, playwright_instance)
+            
             # Inject JavaScript to hide automation indicators
             # This helps avoid detection by anti-bot systems
             page.add_init_script("""
@@ -1111,7 +1248,9 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
                     login_success, needs_2fa, login_error = login(page, username, password, wait_for_2fa=False, two_factor_code=two_factor_code)
                     
                     if needs_2fa:
-                        # 2FA is required - raise exception so UI can handle it
+                        # 2FA is required - keep browser alive for retry
+                        keep_browser_alive = True
+                        # Raise exception so UI can handle it
                         raise TwoFactorAuthRequired("Two-factor authentication is required. Please enter your 6-digit code.")
                     
                     if not login_success:
@@ -1157,20 +1296,38 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
                             progress_callback(i, len(image_paths), filename, "error")
             
             except TwoFactorAuthRequired:
-                # Re-raise 2FA exception so UI can handle it
+                # 2FA is required - keep browser session alive for retry
+                # Don't close browser, don't cleanup session - it will be reused
+                # Re-raise exception so UI can handle it
                 raise
             except Exception as e:
                 # If login or navigation fails, mark all as failed
                 for image_path in image_paths:
                     filename = os.path.basename(image_path)
                     failed.append((filename, f"Initialization error: {str(e)}"))
+                # Cleanup session on error (unless it's a 2FA exception)
+                if session_key and not keep_browser_alive:
+                    cleanup_session(session_key)
             finally:
-                # Safely close browser if it was created
-                try:
-                    if 'browser' in locals() and browser:
-                        browser.close()
-                except:
-                    pass  # Browser may not have been created or already closed
+                # Only close browser if we're not keeping it alive for 2FA retry
+                if not keep_browser_alive:
+                    if session_key:
+                        # Cleanup session - this will close the browser and stop playwright instance
+                        cleanup_session(session_key)
+                    elif not reuse_session and browser_created:
+                        # If we created a new browser but didn't store it, close it
+                        try:
+                            if 'browser' in locals() and browser:
+                                browser.close()
+                        except:
+                            pass
+                        
+                        # Stop playwright instance if we created it
+                        if playwright_instance:
+                            try:
+                                playwright_instance.stop()
+                            except:
+                                pass
     
     except RuntimeError as e:
         # Catch our custom RuntimeError for missing browsers
