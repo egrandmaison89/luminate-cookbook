@@ -305,20 +305,16 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
             - needs_2fa: True if 2FA is required but no code was provided
             - error: Error message if login failed, None otherwise
     """
-    # First, navigate to login page and check current state
-    page.goto(LOGIN_URL)
-    
-    # Wait for the page to fully load
-    page.wait_for_load_state("networkidle")
-    # Add a small random delay to simulate human reading time
-    page.wait_for_timeout(2000 + random.randint(0, 1000))
-    
-    # Check current page state to see if we're already on a 2FA page
-    current_url = page.url
+    # FIRST: Check current page state BEFORE navigating
+    # This is critical when reusing a browser session - we may already be on the 2FA page
+    current_url = ""
+    page_content = ""
     try:
+        current_url = page.url
         page_content = page.content().lower()
     except:
-        page_content = ""
+        # Page might not be loaded yet, will check after navigation
+        pass
     
     # Check for 2FA indicators
     two_factor_indicators = [
@@ -328,7 +324,8 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
         'authenticator',
         'security code',
         'enter code',
-        'verify your identity'
+        'verify your identity',
+        'we sent a security code'  # From the screenshot
     ]
     
     has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
@@ -344,12 +341,52 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
     except:
         pass
     
-    # If we're already on a 2FA page and have a code, skip username/password entry
-    if has_2fa_prompt and two_factor_code and not username_password_fields_exist:
-        # We're already on the 2FA page (unlikely with new session, but handle it defensively)
-        # Skip directly to 2FA code entry logic below
-        pass
+    # If we're already on a 2FA page and have a code, skip navigation and username/password entry
+    already_on_2fa_page = has_2fa_prompt and two_factor_code and not username_password_fields_exist
+    
+    if already_on_2fa_page:
+        # We're already on the 2FA page - wait for it to be ready, then skip to code submission
+        try:
+            page.wait_for_load_state("networkidle", timeout=5000)
+        except:
+            pass
+        page.wait_for_timeout(1000)  # Brief wait to ensure page is ready
+        # Re-check page content to ensure we have latest state
+        try:
+            page_content = page.content().lower()
+            has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
+        except:
+            pass
     else:
+        # We need to navigate to login page and go through normal flow
+        page.goto(LOGIN_URL)
+        
+        # Wait for the page to fully load
+        page.wait_for_load_state("networkidle")
+        # Add a small random delay to simulate human reading time
+        page.wait_for_timeout(2000 + random.randint(0, 1000))
+        
+        # Re-check page state after navigation
+        current_url = page.url
+        try:
+            page_content = page.content().lower()
+        except:
+            page_content = ""
+        
+        has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
+        
+        # Re-check if username/password fields exist
+        username_password_fields_exist = False
+        try:
+            textboxes = page.get_by_role("textbox")
+            textbox_count = textboxes.count()
+            if textbox_count >= 2:
+                username_password_fields_exist = True
+        except:
+            pass
+    
+    # If we're not already on 2FA page, proceed with username/password entry
+    if not already_on_2fa_page and not has_2fa_prompt:
         # Normal flow: enter username and password
         # Use role-based selectors which are more reliable
         username_input = page.get_by_role("textbox").first
