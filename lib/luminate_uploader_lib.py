@@ -201,6 +201,7 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
             - needs_2fa: True if 2FA is required but no code was provided
             - error: Error message if login failed, None otherwise
     """
+    # First, navigate to login page and check current state
     page.goto(LOGIN_URL)
     
     # Wait for the page to fully load
@@ -208,44 +209,12 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
     # Add a small random delay to simulate human reading time
     page.wait_for_timeout(2000 + random.randint(0, 1000))
     
-    # Use role-based selectors which are more reliable
-    username_input = page.get_by_role("textbox").first
-    password_input = page.get_by_role("textbox").nth(1)
-    
-    # Simulate human typing for username (not instant fill)
-    username_input.click()
-    page.wait_for_timeout(random.randint(100, 300))  # Brief pause before typing
-    
-    # Clear any existing content and type username character by character with human-like delays
-    username_input.clear()
-    for char in username:
-        username_input.type(char, delay=random.randint(50, 150))
-    
-    # Small pause after typing username (human behavior)
-    page.wait_for_timeout(random.randint(200, 500))
-    
-    # Move to password field
-    password_input.click()
-    page.wait_for_timeout(random.randint(100, 300))
-    
-    # Clear any existing content and type password character by character with human-like delays
-    password_input.clear()
-    for char in password:
-        password_input.type(char, delay=random.randint(50, 150))
-    
-    # Brief pause before clicking submit (human behavior)
-    page.wait_for_timeout(random.randint(300, 800))
-    
-    # Submit the form by clicking the Log In button
-    page.get_by_role("button", name="Log In").click()
-    
-    # Wait for navigation after login
-    page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(2000)
-    
-    # Check if 2FA is required
+    # Check current page state to see if we're already on a 2FA page
     current_url = page.url
-    page_content = page.content().lower()
+    try:
+        page_content = page.content().lower()
+    except:
+        page_content = ""
     
     # Check for 2FA indicators
     two_factor_indicators = [
@@ -259,6 +228,68 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
     ]
     
     has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
+    
+    # Check if username/password fields exist
+    username_password_fields_exist = False
+    try:
+        textboxes = page.get_by_role("textbox")
+        textbox_count = textboxes.count()
+        # If we have 2 or more textboxes, likely username/password fields exist
+        if textbox_count >= 2:
+            username_password_fields_exist = True
+    except:
+        pass
+    
+    # If we're already on a 2FA page and have a code, skip username/password entry
+    if has_2fa_prompt and two_factor_code and not username_password_fields_exist:
+        # We're already on the 2FA page (unlikely with new session, but handle it defensively)
+        # Skip directly to 2FA code entry logic below
+        pass
+    else:
+        # Normal flow: enter username and password
+        # Use role-based selectors which are more reliable
+        username_input = page.get_by_role("textbox").first
+        password_input = page.get_by_role("textbox").nth(1)
+        
+        # Simulate human typing for username (not instant fill)
+        username_input.click()
+        page.wait_for_timeout(random.randint(100, 300))  # Brief pause before typing
+        
+        # Clear any existing content and type username character by character with human-like delays
+        username_input.clear()
+        for char in username:
+            username_input.type(char, delay=random.randint(50, 150))
+        
+        # Small pause after typing username (human behavior)
+        page.wait_for_timeout(random.randint(200, 500))
+        
+        # Move to password field
+        password_input.click()
+        page.wait_for_timeout(random.randint(100, 300))
+        
+        # Clear any existing content and type password character by character with human-like delays
+        password_input.clear()
+        for char in password:
+            password_input.type(char, delay=random.randint(50, 150))
+        
+        # Brief pause before clicking submit (human behavior)
+        page.wait_for_timeout(random.randint(300, 800))
+        
+        # Submit the form by clicking the Log In button
+        page.get_by_role("button", name="Log In").click()
+        
+        # Wait for navigation after login
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(2000)
+        
+        # Re-check page state after login submission
+        current_url = page.url
+        try:
+            page_content = page.content().lower()
+        except:
+            page_content = ""
+        
+        has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
     
     # Also check if we're still on login page (might indicate 2FA or error)
     still_on_login = 'AdminLogin' in current_url or 'login' in current_url.lower()

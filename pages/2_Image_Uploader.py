@@ -207,15 +207,19 @@ def main():
                 st.session_state['2fa_error'] = "Please enter a valid 6-digit code."
                 st.rerun()
             else:
-                # Store code and clear error
-                st.session_state.two_factor_code = two_factor_input
-                st.session_state['2fa_error'] = None
-                # Automatically retry upload if we have pending files
-                # Don't set uploading=True here - let auto-retry handle it
-                if st.session_state.pending_upload_files:
-                    st.rerun()  # Auto-retry will trigger on next rerun
-                else:
+                # Validate that we have all required state for retry
+                if not st.session_state.pending_upload_files:
+                    st.session_state['2fa_error'] = "No pending upload files found. Please start a new upload."
                     st.rerun()
+                elif not st.session_state.pending_username:
+                    st.session_state['2fa_error'] = "Authentication credentials not found. Please start a new upload."
+                    st.rerun()
+                else:
+                    # Store code and clear error
+                    st.session_state.two_factor_code = two_factor_input
+                    st.session_state['2fa_error'] = None
+                    # Automatically retry upload - don't set uploading=True here, let auto-retry handle it
+                    st.rerun()  # Auto-retry will trigger on next rerun
     
     # Check for saved session
     has_saved_session = False
@@ -287,14 +291,45 @@ def main():
     # Use pending files if available (for 2FA retry), otherwise use current uploaded files
     files_to_upload = st.session_state.pending_upload_files if st.session_state.pending_upload_files else uploaded_files
     
+    # For 2FA retry, ensure we have valid auth (use pending credentials if available)
+    # This is critical - during 2FA retry, form fields might be empty but pending credentials should exist
+    if should_auto_retry:
+        # During 2FA retry, we must have pending credentials (check session state directly)
+        retry_username = st.session_state.pending_username or active_username
+        retry_password = st.session_state.pending_password or active_password
+        
+        if not retry_username:
+            st.error("❌ Authentication error: Username not found. Please start a new upload.")
+            st.session_state.needs_2fa = False
+            st.session_state.two_factor_code = None
+            return
+        if not retry_password and not has_saved_session:
+            st.error("❌ Authentication error: Password not found. Please start a new upload.")
+            st.session_state.needs_2fa = False
+            st.session_state.two_factor_code = None
+            return
+        # Override has_valid_auth for 2FA retry if we have pending credentials
+        has_valid_auth = bool(retry_username) and (bool(retry_password) or has_saved_session)
+        # Also update active_username/password to use retry values
+        active_username = retry_username
+        active_password = retry_password
+    
     if st.button(
         "🚀 Upload All Images",
         type="primary",
         disabled=not (playwright_available and has_valid_auth and files_to_upload and not st.session_state.uploading),
         use_container_width=True
     ) or should_auto_retry:
+        # Show status if auto-retrying with 2FA
+        if should_auto_retry:
+            st.info("🔄 Retrying upload with 2FA code...")
+        
         if not has_valid_auth:
             st.error("Please provide your Luminate username and password (or a username with a saved session).")
+            if should_auto_retry:
+                # Clear 2FA state if auth is invalid during retry
+                st.session_state.needs_2fa = False
+                st.session_state.two_factor_code = None
             return
         
         if not files_to_upload:
@@ -313,6 +348,13 @@ def main():
         # Store username in session state (if provided)
         if username:
             st.session_state.username = username
+        
+        # Store credentials for potential 2FA retry (store before starting upload)
+        # This ensures credentials are available even if 2FA is required immediately
+        if active_username:
+            st.session_state.pending_username = active_username
+        if active_password:
+            st.session_state.pending_password = active_password
         
         # Start upload process
         st.session_state.uploading = True
