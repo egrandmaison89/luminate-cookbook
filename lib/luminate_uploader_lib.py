@@ -486,13 +486,14 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
                     page.wait_for_timeout(500)
                     
                     # Try to find and click submit button
+                    # From screenshot: The 2FA page has a "Log In" button to submit the code
                     submit_button = None
                     try:
-                        # Try common submit button selectors
-                        submit_button = page.locator('button[type="submit"], input[type="submit"], button:has-text("Submit"), button:has-text("Verify"), button:has-text("Continue")').first
+                        # Try common submit button selectors, including "Log In" for 2FA page
+                        submit_button = page.locator('button[type="submit"], input[type="submit"], button:has-text("Submit"), button:has-text("Verify"), button:has-text("Continue"), button:has-text("Log In")').first
                         if submit_button.count() == 0:
-                            # Try role-based
-                            submit_button = page.get_by_role("button", name=re.compile("submit|verify|continue", re.I)).first
+                            # Try role-based - include "log in" in the regex
+                            submit_button = page.get_by_role("button", name=re.compile("submit|verify|continue|log in", re.I)).first
                     except:
                         pass
                     
