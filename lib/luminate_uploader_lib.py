@@ -305,18 +305,7 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
             - needs_2fa: True if 2FA is required but no code was provided
             - error: Error message if login failed, None otherwise
     """
-    # FIRST: Check current page state BEFORE navigating
-    # This is critical when reusing a browser session - we may already be on the 2FA page
-    current_url = ""
-    page_content = ""
-    try:
-        current_url = page.url
-        page_content = page.content().lower()
-    except:
-        # Page might not be loaded yet, will check after navigation
-        pass
-    
-    # Check for 2FA indicators
+    # Check for 2FA indicators (used throughout)
     two_factor_indicators = [
         'two-factor',
         '2fa',
@@ -328,37 +317,67 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
         'we sent a security code'  # From the screenshot
     ]
     
-    has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
+    # SIMPLIFIED LOGIC:
+    # - If no two_factor_code (first attempt): Always navigate to LOGIN_URL
+    # - If two_factor_code provided (retry): Check if already on 2FA page, only skip navigation if CERTAIN
     
-    # Check if username/password fields exist
-    username_password_fields_exist = False
-    try:
-        textboxes = page.get_by_role("textbox")
-        textbox_count = textboxes.count()
-        # If we have 2 or more textboxes, likely username/password fields exist
-        if textbox_count >= 2:
-            username_password_fields_exist = True
-    except:
-        pass
+    already_on_2fa_page = False
     
-    # If we're already on a 2FA page and have a code, skip navigation and username/password entry
-    already_on_2fa_page = has_2fa_prompt and two_factor_code and not username_password_fields_exist
-    
-    if already_on_2fa_page:
-        # We're already on the 2FA page - wait for it to be ready, then skip to code submission
+    if two_factor_code:
+        # Retry attempt with 2FA code - check if we're already on the 2FA page
+        # This happens when reusing a browser session
         try:
-            page.wait_for_load_state("networkidle", timeout=5000)
+            current_url = page.url
+            # Check if URL is blank or about:blank - if so, we need to navigate
+            if not current_url or current_url == "about:blank" or "about:" in current_url:
+                # Page is blank, need to navigate
+                already_on_2fa_page = False
+            else:
+                # Page has content, check if we're on 2FA page
+                try:
+                    page_content = page.content().lower()
+                    has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
+                    
+                    # Check if username/password fields exist
+                    username_password_fields_exist = False
+                    try:
+                        textboxes = page.get_by_role("textbox")
+                        textbox_count = textboxes.count()
+                        if textbox_count >= 2:
+                            username_password_fields_exist = True
+                    except:
+                        pass
+                    
+                    # Only skip navigation if we're CERTAIN we're on 2FA page
+                    # Need: 2FA prompt detected AND no username/password fields AND valid URL
+                    if has_2fa_prompt and not username_password_fields_exist and 'AdminLogin' in current_url:
+                        already_on_2fa_page = True
+                        # Wait for page to be ready
+                        try:
+                            page.wait_for_load_state("networkidle", timeout=5000)
+                        except:
+                            pass
+                        page.wait_for_timeout(1000)
+                        # Re-check to confirm
+                        try:
+                            page_content = page.content().lower()
+                            has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
+                            if not has_2fa_prompt:
+                                # Lost 2FA prompt, need to navigate
+                                already_on_2fa_page = False
+                        except:
+                            # Error re-checking, be safe and navigate
+                            already_on_2fa_page = False
+                except:
+                    # Error checking page content, be safe and navigate
+                    already_on_2fa_page = False
         except:
-            pass
-        page.wait_for_timeout(1000)  # Brief wait to ensure page is ready
-        # Re-check page content to ensure we have latest state
-        try:
-            page_content = page.content().lower()
-            has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
-        except:
-            pass
-    else:
-        # We need to navigate to login page and go through normal flow
+            # Error checking page URL, be safe and navigate
+            already_on_2fa_page = False
+    
+    # Navigate to login page if needed
+    if not already_on_2fa_page:
+        # Navigate to login page (either first attempt or retry where we're not on 2FA page)
         page.goto(LOGIN_URL)
         
         # Wait for the page to fully load
@@ -366,7 +385,7 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
         # Add a small random delay to simulate human reading time
         page.wait_for_timeout(2000 + random.randint(0, 1000))
         
-        # Re-check page state after navigation
+        # Check page state after navigation
         current_url = page.url
         try:
             page_content = page.content().lower()
@@ -374,19 +393,19 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
             page_content = ""
         
         has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
-        
-        # Re-check if username/password fields exist
-        username_password_fields_exist = False
+    else:
+        # We're already on 2FA page, get current state
         try:
-            textboxes = page.get_by_role("textbox")
-            textbox_count = textboxes.count()
-            if textbox_count >= 2:
-                username_password_fields_exist = True
+            current_url = page.url
+            page_content = page.content().lower()
+            has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
         except:
-            pass
+            current_url = ""
+            page_content = ""
+            has_2fa_prompt = False
     
-    # If we're not already on 2FA page, proceed with username/password entry
-    if not already_on_2fa_page and not has_2fa_prompt:
+    # Proceed with username/password entry if not on 2FA page
+    if not has_2fa_prompt:
         # Normal flow: enter username and password
         # Use role-based selectors which are more reliable
         username_input = page.get_by_role("textbox").first
