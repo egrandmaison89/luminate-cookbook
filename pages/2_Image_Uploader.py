@@ -211,9 +211,9 @@ def main():
                 st.session_state.two_factor_code = two_factor_input
                 st.session_state['2fa_error'] = None
                 # Automatically retry upload if we have pending files
+                # Don't set uploading=True here - let auto-retry handle it
                 if st.session_state.pending_upload_files:
-                    st.session_state.uploading = True
-                    st.rerun()
+                    st.rerun()  # Auto-retry will trigger on next rerun
                 else:
                     st.rerun()
     
