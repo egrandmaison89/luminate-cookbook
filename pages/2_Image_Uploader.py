@@ -363,20 +363,36 @@ def main():
     st.markdown("---")
     st.subheader("Step 3: Select Images to Upload")
     
+    st.info("💡 **Tip:** Each file should be under 10MB. If you get an upload error, try compressing your images first.")
+    
     uploaded_files = st.file_uploader(
         "Choose image files",
         type=['jpg', 'jpeg', 'png', 'gif'],
         accept_multiple_files=True,
-        help="You can select multiple images at once. Supported formats: JPG, PNG, GIF"
+        help="You can select multiple images at once. Supported formats: JPG, PNG, GIF. Maximum file size: 10MB per file."
     )
     
     if uploaded_files:
-        st.success(f"✅ {len(uploaded_files)} image(s) selected")
+        # Validate file sizes before proceeding
+        invalid_files = []
+        for file in uploaded_files:
+            file_size_mb = file.size / (1024 * 1024)
+            if file_size_mb > 10:
+                invalid_files.append((file.name, file_size_mb))
         
-        # Show file list
-        with st.expander("View selected files"):
-            for i, file in enumerate(uploaded_files, 1):
-                st.text(f"{i}. {file.name} ({file.size / 1024:.1f} KB)")
+        if invalid_files:
+            st.error("⚠️ Some files are too large:")
+            for filename, size_mb in invalid_files:
+                st.error(f"  • {filename}: {size_mb:.1f}MB (max 10MB)")
+            st.info("Please resize or compress these files before uploading.")
+        else:
+            st.success(f"✅ {len(uploaded_files)} image(s) selected")
+            
+            # Show file list
+            with st.expander("View selected files"):
+                for i, file in enumerate(uploaded_files, 1):
+                    file_size_mb = file.size / (1024 * 1024)
+                    st.text(f"{i}. {file.name} ({file_size_mb:.2f} MB)")
     
     # Step 4: Upload Button
     st.markdown("---")

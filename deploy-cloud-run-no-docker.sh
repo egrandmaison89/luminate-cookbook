@@ -68,7 +68,8 @@ gcloud run deploy luminate-cookbook \
     --cpu 2 \
     --timeout 300 \
     --max-instances 10 \
-    --set-env-vars "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright"
+    --set-env-vars "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright" \
+    --set-env-vars "STREAMLIT_SERVER_MAX_UPLOAD_SIZE=200"
 
 # Get the service URL
 SERVICE_URL=$(gcloud run services describe luminate-cookbook \
