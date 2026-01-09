@@ -112,6 +112,10 @@ if 'pending_cookies' not in st.session_state:
     st.session_state.pending_cookies = None
 if '2fa_error' not in st.session_state:
     st.session_state['2fa_error'] = None
+if '2fa_url' not in st.session_state:
+    st.session_state['2fa_url'] = None
+if '2fa_state_path' not in st.session_state:
+    st.session_state['2fa_state_path'] = None
 
 
 def main():
@@ -515,18 +519,23 @@ def main():
                             progress_callback,
                             two_factor_code=st.session_state.two_factor_code
                         )
-                    except TwoFactorAuthRequired:
-                        # 2FA required - stop upload and show input field
-                        # Store credentials for retry (files already stored in image_paths)
-                        st.session_state.pending_username = active_username
-                        st.session_state.pending_password = active_password
-                        st.session_state.pending_cookies = active_cookies
-                        st.session_state.uploading = False
-                        st.session_state.needs_2fa = True
-                        progress_bar.empty()
-                        status_text.empty()
-                        st.warning("🔐 Two-factor authentication is required. Please enter your 6-digit code above.")
-                        return
+                except TwoFactorAuthRequired as e:
+                    # 2FA required - stop upload and show input field
+                    # Store credentials for retry (files already stored in image_paths)
+                    st.session_state.pending_username = active_username
+                    st.session_state.pending_password = active_password
+                    st.session_state.pending_cookies = active_cookies
+                    st.session_state.uploading = False
+                    st.session_state.needs_2fa = True
+                    # Store 2FA context if available
+                    if hasattr(e, 'current_url'):
+                        st.session_state['2fa_url'] = e.current_url
+                    if hasattr(e, 'browser_state_path'):
+                        st.session_state['2fa_state_path'] = e.browser_state_path
+                    progress_bar.empty()
+                    status_text.empty()
+                    st.warning("🔐 Two-factor authentication is required. Please enter your 6-digit code above.")
+                    return
             
             # Use username/password if no cookies provided
             elif has_credentials:
@@ -542,7 +551,7 @@ def main():
                         progress_callback,
                         two_factor_code=st.session_state.two_factor_code
                     )
-                except TwoFactorAuthRequired:
+                except TwoFactorAuthRequired as e:
                     # 2FA required - stop upload and show input field
                     # Store credentials for retry (files already stored in image_paths)
                     st.session_state.pending_username = active_username
@@ -550,6 +559,11 @@ def main():
                     st.session_state.pending_cookies = active_cookies
                     st.session_state.uploading = False
                     st.session_state.needs_2fa = True
+                    # Store 2FA context if available
+                    if hasattr(e, 'current_url'):
+                        st.session_state['2fa_url'] = e.current_url
+                    if hasattr(e, 'browser_state_path'):
+                        st.session_state['2fa_state_path'] = e.browser_state_path
                     progress_bar.empty()
                     status_text.empty()
                     st.warning("🔐 Two-factor authentication is required. Please enter your 6-digit code above.")
@@ -568,6 +582,17 @@ def main():
                 st.session_state.pending_password = None
                 st.session_state.pending_cookies = None
                 st.session_state['2fa_error'] = None
+                # Clean up 2FA state file if it exists
+                if '2fa_state_path' in st.session_state and st.session_state['2fa_state_path']:
+                    try:
+                        import os
+                        if os.path.exists(st.session_state['2fa_state_path']):
+                            os.remove(st.session_state['2fa_state_path'])
+                    except:
+                        pass
+                    st.session_state['2fa_state_path'] = None
+                if '2fa_url' in st.session_state:
+                    st.session_state['2fa_url'] = None
                 # Clean up temp directory
                 if 'upload_temp_dir' in st.session_state and st.session_state.upload_temp_dir:
                     try:

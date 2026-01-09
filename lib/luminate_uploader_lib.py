@@ -36,7 +36,10 @@ AUTH_MODE_COOKIES = "cookies"  # Use pre-authenticated cookies (bypasses 2FA)
 
 class TwoFactorAuthRequired(Exception):
     """Exception raised when 2FA is required during login."""
-    pass
+    def __init__(self, message, current_url=None, browser_state_path=None):
+        super().__init__(message)
+        self.current_url = current_url
+        self.browser_state_path = browser_state_path
 
 
 def is_streamlit_cloud():
@@ -178,6 +181,152 @@ def clear_browser_state(username):
         return False
 
 
+def submit_2fa_code(page, two_factor_code):
+    """Submit a 2FA code when already on the 2FA page.
+    
+    Args:
+        page: Playwright page object (should already be on 2FA page)
+        two_factor_code: 6-digit 2FA code to submit
+        
+    Returns:
+        tuple: (success: bool, error: str or None)
+    """
+    try:
+        # Wait a moment for the page to fully load
+        page.wait_for_timeout(1000)
+        
+        # Try multiple strategies to find the 2FA input field
+        code_input = None
+        
+        # Strategy 1: Look for inputs with maxlength="6" (6-digit codes)
+        try:
+            potential_input = page.locator('input[maxlength="6"], input[maxlength="6" i]').first
+            if potential_input.count() > 0:
+                code_input = potential_input
+        except:
+            pass
+        
+        # Strategy 2: Look for inputs with code-related attributes
+        if not code_input:
+            try:
+                potential_input = page.locator('input[name*="code" i], input[id*="code" i], input[name*="verify" i], input[id*="verify" i], input[name*="2fa" i], input[id*="2fa" i], input[name*="otp" i], input[id*="otp" i]').first
+                if potential_input.count() > 0:
+                    code_input = potential_input
+            except:
+                pass
+        
+        # Strategy 3: Look for input type="tel" (often used for verification codes)
+        if not code_input:
+            try:
+                tel_inputs = page.locator('input[type="tel"]')
+                if tel_inputs.count() > 0:
+                    code_input = tel_inputs.first
+            except:
+                pass
+        
+        # Strategy 4: Look for text inputs
+        if not code_input:
+            try:
+                all_inputs = page.locator('input[type="text"]')
+                if all_inputs.count() > 0:
+                    code_input = all_inputs.first
+            except:
+                pass
+        
+        # Strategy 5: Use role-based selector for textbox
+        if not code_input:
+            try:
+                code_input = page.get_by_role("textbox").first
+            except:
+                pass
+        
+        # Strategy 6: Look for input with pattern matching digits
+        if not code_input:
+            try:
+                pattern_inputs = page.locator('input[pattern*="\\d"], input[pattern*="[0-9]"]')
+                if pattern_inputs.count() > 0:
+                    code_input = pattern_inputs.first
+            except:
+                pass
+        
+        if code_input and code_input.count() > 0:
+            # Found the input field, enter the code
+            code_input.click()
+            page.wait_for_timeout(200)
+            code_input.clear()
+            
+            # Type the code character by character (human-like)
+            for char in str(two_factor_code):
+                code_input.type(char, delay=random.randint(50, 150))
+            
+            page.wait_for_timeout(500)
+            
+            # Try to find and click submit button
+            submit_button = None
+            try:
+                # Try common submit button selectors
+                submit_button = page.locator('button[type="submit"], input[type="submit"], button:has-text("Submit"), button:has-text("Verify"), button:has-text("Continue")').first
+                if submit_button.count() == 0:
+                    # Try role-based
+                    submit_button = page.get_by_role("button", name=re.compile("submit|verify|continue", re.I)).first
+            except:
+                pass
+            
+            if submit_button and submit_button.count() > 0:
+                submit_button.click()
+            else:
+                # Fallback: try pressing Enter
+                code_input.press("Enter")
+            
+            # Wait for navigation
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(2000)
+            
+            # Verify authentication was successful
+            current_url = page.url
+            if 'AdminLogin' not in current_url and 'login' not in current_url.lower():
+                # Check if we can access protected content
+                try:
+                    page.goto(IMAGE_LIBRARY_URL, timeout=10000)
+                    page.wait_for_load_state("networkidle")
+                    page.wait_for_selector('text=Upload Image', timeout=5000)
+                    return (True, None)
+                except:
+                    # Might still be authenticating, check again
+                    page.wait_for_timeout(2000)
+                    current_url = page.url
+                    if 'AdminLogin' not in current_url and 'login' not in current_url.lower():
+                        try:
+                            page.wait_for_selector('text=Upload Image', timeout=5000)
+                            return (True, None)
+                        except:
+                            pass
+            
+            # Check if 2FA prompt is still there (code might be invalid)
+            page_content = page.content().lower()
+            two_factor_indicators = [
+                'two-factor', '2fa', 'verification code', 'authenticator',
+                'security code', 'enter code', 'verify your identity'
+            ]
+            still_has_2fa = any(indicator in page_content for indicator in two_factor_indicators)
+            if still_has_2fa:
+                return (False, "Invalid 2FA code. Please try again.")
+            else:
+                # 2FA prompt gone, verify we're logged in
+                try:
+                    page.goto(IMAGE_LIBRARY_URL, timeout=10000)
+                    page.wait_for_load_state("networkidle")
+                    page.wait_for_selector('text=Upload Image', timeout=5000)
+                    return (True, None)
+                except:
+                    return (False, "2FA code submitted but authentication verification failed.")
+        else:
+            return (False, "Could not find 2FA input field on the page.")
+            
+    except Exception as e:
+        return (False, f"Error submitting 2FA code: {str(e)}")
+
+
 def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, two_factor_code=None):
     """Log into Luminate Online with provided credentials.
     
@@ -247,7 +396,7 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
     current_url = page.url
     page_content = page.content().lower()
     
-    # Check for 2FA indicators
+    # Check for 2FA indicators in page content
     two_factor_indicators = [
         'two-factor',
         '2fa',
@@ -255,15 +404,43 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
         'authenticator',
         'security code',
         'enter code',
-        'verify your identity'
+        'verify your identity',
+        'verification',
+        'enter the code',
+        'six-digit',
+        '6-digit',
+        'text message',
+        'sms code'
     ]
     
     has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
     
+    # Also check for 2FA-specific HTML elements
+    # Look for input fields that might be for 2FA codes (6-digit codes)
+    has_2fa_input = False
+    try:
+        # Check for input with maxlength="6" (common for 6-digit codes)
+        code_inputs = page.locator('input[maxlength="6"], input[maxlength="6" i]')
+        if code_inputs.count() > 0:
+            has_2fa_input = True
+        # Also check for inputs with pattern matching 6 digits
+        pattern_inputs = page.locator('input[pattern*="6"], input[pattern*="\\d{6}"]')
+        if pattern_inputs.count() > 0:
+            has_2fa_input = True
+        # Check for input with type="tel" (often used for verification codes)
+        tel_inputs = page.locator('input[type="tel"]')
+        if tel_inputs.count() > 0:
+            has_2fa_input = True
+    except:
+        pass
+    
     # Also check if we're still on login page (might indicate 2FA or error)
     still_on_login = 'AdminLogin' in current_url or 'login' in current_url.lower()
     
-    if has_2fa_prompt or (still_on_login and 'error' not in page_content):
+    # Check for error messages - if there's an error, it's not 2FA
+    has_error = any(error_term in page_content for error_term in ['error', 'invalid', 'incorrect', 'failed'])
+    
+    if (has_2fa_prompt or has_2fa_input or (still_on_login and not has_error)):
         # 2FA is required
         if two_factor_code:
             # We have a code, try to submit it
@@ -274,15 +451,33 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
                 # Try multiple strategies to find the 2FA input field
                 code_input = None
                 
-                # Strategy 1: Look for inputs with code-related attributes
+                # Strategy 1: Look for inputs with maxlength="6" (6-digit codes)
                 try:
-                    potential_input = page.locator('input[name*="code" i], input[id*="code" i], input[name*="verify" i], input[id*="verify" i], input[name*="2fa" i], input[id*="2fa" i]').first
+                    potential_input = page.locator('input[maxlength="6"], input[maxlength="6" i]').first
                     if potential_input.count() > 0:
                         code_input = potential_input
                 except:
                     pass
                 
-                # Strategy 2: Look for text inputs (excluding username/password fields)
+                # Strategy 2: Look for inputs with code-related attributes
+                if not code_input:
+                    try:
+                        potential_input = page.locator('input[name*="code" i], input[id*="code" i], input[name*="verify" i], input[id*="verify" i], input[name*="2fa" i], input[id*="2fa" i], input[name*="otp" i], input[id*="otp" i]').first
+                        if potential_input.count() > 0:
+                            code_input = potential_input
+                    except:
+                        pass
+                
+                # Strategy 3: Look for input type="tel" (often used for verification codes)
+                if not code_input:
+                    try:
+                        tel_inputs = page.locator('input[type="tel"]')
+                        if tel_inputs.count() > 0:
+                            code_input = tel_inputs.first
+                    except:
+                        pass
+                
+                # Strategy 4: Look for text inputs (excluding username/password fields)
                 if not code_input:
                     try:
                         # Get all text inputs, filter out username/password
@@ -294,10 +489,19 @@ def login(page, username, password, wait_for_2fa=True, max_2fa_wait_time=300, tw
                     except:
                         pass
                 
-                # Strategy 3: Use role-based selector for textbox
+                # Strategy 5: Use role-based selector for textbox
                 if not code_input:
                     try:
                         code_input = page.get_by_role("textbox").first
+                    except:
+                        pass
+                
+                # Strategy 6: Look for input with pattern matching digits
+                if not code_input:
+                    try:
+                        pattern_inputs = page.locator('input[pattern*="\\d"], input[pattern*="[0-9]"]')
+                        if pattern_inputs.count() > 0:
+                            code_input = pattern_inputs.first
                     except:
                         pass
                 
@@ -976,7 +1180,12 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
                 else:
                     raise
             
-            # Try to load saved browser state first
+            # Check if we have a saved 2FA state (from previous 2FA attempt)
+            # This happens when user is retrying with a 2FA code
+            temp_2fa_state_path = get_storage_state_path(username).replace('.json', '_2fa.json')
+            has_2fa_state = os.path.exists(temp_2fa_state_path) if two_factor_code else False
+            
+            # Try to load saved browser state first (normal session, not 2FA)
             saved_state_path = load_browser_state(username)
             session_valid = False
             needs_login = True
@@ -1008,8 +1217,13 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
                 }
             }
             
-            # If we have a saved state, try to use it
-            if saved_state_path:
+            # If we have a saved 2FA state, use it (this means we're retrying with a code)
+            if has_2fa_state:
+                context_options['storage_state'] = temp_2fa_state_path
+                if progress_callback:
+                    progress_callback(0, len(image_paths), "Restoring 2FA session...", "info")
+            # Otherwise, if we have a saved state, try to use it
+            elif saved_state_path:
                 context_options['storage_state'] = saved_state_path
                 if progress_callback:
                     progress_callback(0, len(image_paths), "Loading saved session...", "info")
@@ -1074,14 +1288,64 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
                 
                 # Login if needed
                 if needs_login:
-                    if progress_callback:
-                        progress_callback(0, len(image_paths), "Logging in to Luminate Online...", "info")
-                    
-                    login_success, needs_2fa, login_error = login(page, username, password, wait_for_2fa=False, two_factor_code=two_factor_code)
+                    # If we have a 2FA state, we're retrying with a code
+                    if has_2fa_state and two_factor_code:
+                        if progress_callback:
+                            progress_callback(0, len(image_paths), "Restoring 2FA session...", "info")
+                        # Navigate to login URL - the saved state contains cookies that should
+                        # keep us authenticated to the 2FA page
+                        page.goto(LOGIN_URL, timeout=30000)
+                        page.wait_for_load_state("networkidle")
+                        page.wait_for_timeout(2000)
+                        
+                        # Check if we're on the 2FA page
+                        page_content = page.content().lower()
+                        two_factor_indicators = [
+                            'two-factor', '2fa', 'verification code', 'authenticator',
+                            'security code', 'enter code', 'verify your identity'
+                        ]
+                        is_on_2fa_page = any(indicator in page_content for indicator in two_factor_indicators)
+                        
+                        if is_on_2fa_page:
+                            # We're on the 2FA page, submit the code directly
+                            if progress_callback:
+                                progress_callback(0, len(image_paths), "Submitting 2FA code...", "info")
+                            login_success, login_error = submit_2fa_code(page, two_factor_code)
+                            needs_2fa = False if login_success else True
+                            if not login_success and not login_error:
+                                login_error = "2FA code submission failed"
+                        else:
+                            # Not on 2FA page, try normal login (might have been redirected)
+                            if progress_callback:
+                                progress_callback(0, len(image_paths), "Logging in to Luminate Online...", "info")
+                            login_success, needs_2fa, login_error = login(page, username, password, wait_for_2fa=False, two_factor_code=two_factor_code)
+                    else:
+                        if progress_callback:
+                            progress_callback(0, len(image_paths), "Logging in to Luminate Online...", "info")
+                        
+                        login_success, needs_2fa, login_error = login(page, username, password, wait_for_2fa=False, two_factor_code=two_factor_code)
                     
                     if needs_2fa:
-                        # 2FA is required - raise exception so UI can handle it
-                        raise TwoFactorAuthRequired("Two-factor authentication is required. Please enter your 6-digit code.")
+                        # 2FA is required - save browser state before raising exception
+                        # This preserves the session so we can continue after user enters code
+                        current_url = page.url
+                        
+                        # Save browser state to a temporary file for 2FA retry
+                        # Use a special 2FA state file that will be loaded on retry
+                        temp_2fa_state_path = get_storage_state_path(username).replace('.json', '_2fa.json')
+                        try:
+                            context.storage_state(path=temp_2fa_state_path)
+                            os.chmod(temp_2fa_state_path, 0o600)
+                        except Exception as e:
+                            # If we can't save state, still raise exception but without state
+                            temp_2fa_state_path = None
+                        
+                        # Raise exception with context information
+                        raise TwoFactorAuthRequired(
+                            "Two-factor authentication is required. Please enter your 6-digit code.",
+                            current_url=current_url,
+                            browser_state_path=temp_2fa_state_path
+                        )
                     
                     if not login_success:
                         # Login failed
@@ -1099,6 +1363,13 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
                     if progress_callback:
                         progress_callback(0, len(image_paths), "Saving session for future use...", "info")
                     save_browser_state(context, username)
+                    
+                    # Clean up 2FA state file if it exists (login successful)
+                    if has_2fa_state and os.path.exists(temp_2fa_state_path):
+                        try:
+                            os.remove(temp_2fa_state_path)
+                        except:
+                            pass
                     
                     # Navigate to Image Library
                     if progress_callback:
@@ -1125,6 +1396,10 @@ def upload_images_batch(username, password, image_paths, progress_callback=None,
                         if progress_callback:
                             progress_callback(i, len(image_paths), filename, "error")
             
+            except TwoFactorAuthRequired:
+                # Re-raise 2FA exception so it can be handled by the caller
+                # Don't mark images as failed - we'll retry after user enters code
+                raise
             except Exception as e:
                 # If login or navigation fails, mark all as failed
                 for image_path in image_paths:
