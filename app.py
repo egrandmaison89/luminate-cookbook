@@ -115,6 +115,18 @@ def home_page():
         </div>
         """, unsafe_allow_html=True)
     
+    with col4:
+        st.markdown("""
+        <div class="tool-card">
+            <div class="tool-title">📦 Batch Uploader</div>
+            <div class="tool-description">
+                Upload multiple images to Luminate Online with robust 2FA support. 
+                Browser sessions stay alive during 2FA waits for seamless authentication. 
+                Perfect for Cloud Run deployments with multiple concurrent users.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
     # Quick start
     st.markdown("---")
     st.markdown("## 🚀 Quick Start")
@@ -123,6 +135,7 @@ def home_page():
     2. **Email Banner Processor**: Upload images, adjust settings, download optimized banners
     3. **Image Uploader**: Enter credentials, select images, upload to Luminate Online
     4. **PageBuilder Decomposer**: Extract nested PageBuilders as separate HTML files
+    5. **Batch Uploader**: Upload multiple images with persistent browser sessions and 2FA support
     
     All tools are ready to use - no configuration needed!
     """)
@@ -225,6 +238,32 @@ def pagebuilder_decomposer_page():
     load_and_run_page(file_path)
 
 
+def batch_uploader_page():
+    """Batch Uploader page."""
+    file_path = os.path.join(os.path.dirname(__file__), "pages", "4_Batch_Uploader.py")
+    try:
+        load_and_run_page(file_path)
+    except ImportError as e:
+        # Handle import errors gracefully
+        st.error("⚠️ Batch Uploader is currently unavailable")
+        st.markdown("""
+        <div style="padding: 1em; background-color: #fff3cd; border-radius: 5px; border: 1px solid #ffc107; margin: 1em 0;">
+        <strong>Browser automation is not available.</strong><br><br>
+        The Batch Uploader requires browser automation to upload images to Luminate Online.
+        This feature may not be available in all deployment environments.<br><br>
+        <strong>Possible solutions:</strong><br>
+        • If you're using Streamlit Cloud, check deployment logs for dependency issues<br>
+        • Contact support if this is a persistent issue<br>
+        • Try using the tool locally where dependencies can be installed
+        </div>
+        """, unsafe_allow_html=True)
+        st.info(f"Technical details: {str(e)}")
+    except Exception as e:
+        # Handle any other errors gracefully
+        st.error("⚠️ An error occurred loading the Batch Uploader")
+        st.exception(e)
+
+
 # Create page objects using st.Page
 home = st.Page(
     home_page,
@@ -251,9 +290,15 @@ pagebuilder_decomposer = st.Page(
     icon="🔍"
 )
 
+batch_uploader = st.Page(
+    batch_uploader_page,
+    title="Batch Uploader",
+    icon="📦"
+)
+
 # Set up navigation
 pages = {
-    "Luminate Cookbook": [home, email_banner, image_uploader, pagebuilder_decomposer]
+    "Luminate Cookbook": [home, email_banner, image_uploader, pagebuilder_decomposer, batch_uploader]
 }
 
 # Run the selected page
