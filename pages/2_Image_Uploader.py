@@ -535,23 +535,23 @@ def main():
                             progress_callback,
                             two_factor_code=st.session_state.two_factor_code
                         )
-                except TwoFactorAuthRequired as e:
-                    # 2FA required - stop upload and show input field
-                    # Store credentials for retry (files already stored in image_paths)
-                    st.session_state.pending_username = active_username
-                    st.session_state.pending_password = active_password
-                    st.session_state.pending_cookies = active_cookies
-                    st.session_state.uploading = False
-                    st.session_state.needs_2fa = True
-                    # Store 2FA context if available
-                    if hasattr(e, 'current_url'):
-                        st.session_state['2fa_url'] = e.current_url
-                    if hasattr(e, 'browser_state_path'):
-                        st.session_state['2fa_state_path'] = e.browser_state_path
-                    progress_bar.empty()
-                    status_text.empty()
-                    st.warning("🔐 Two-factor authentication is required. Please enter your 6-digit code above.")
-                    return
+                    except TwoFactorAuthRequired as e:
+                        # 2FA required - stop upload and show input field
+                        # Store credentials for retry (files already stored in image_paths)
+                        st.session_state.pending_username = active_username
+                        st.session_state.pending_password = active_password
+                        st.session_state.pending_cookies = active_cookies
+                        st.session_state.uploading = False
+                        st.session_state.needs_2fa = True
+                        # Store 2FA context if available
+                        if hasattr(e, 'current_url'):
+                            st.session_state['2fa_url'] = e.current_url
+                        if hasattr(e, 'browser_state_path'):
+                            st.session_state['2fa_state_path'] = e.browser_state_path
+                        progress_bar.empty()
+                        status_text.empty()
+                        st.warning("🔐 Two-factor authentication is required. Please enter your 6-digit code above.")
+                        return
             
             # Use username/password if no cookies provided
             elif has_credentials:
