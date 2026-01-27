@@ -15,26 +15,32 @@ Extract all nested PageBuilders from a Luminate Online PageBuilder. Enter a URL 
 
 ## 🚀 Quick Start
 
-### Web App (Recommended for Teams)
-A user-friendly web interface - no coding required!
+### Local development (no Docker)
 
-**Try it locally:**
+Run the app on your machine without Docker or a dev container:
+
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
+# Optional: only needed for Image Uploader / Batch Uploader (Playwright)
+python3 -m playwright install chromium
+
 # Run the app
-streamlit run app.py
+python3 -m streamlit run app.py
 ```
 
-The app will open in your browser. Use the sidebar to navigate between tools.
+Open **http://localhost:8501** in your browser. Use the sidebar to navigate between tools.
 
-**Deploy to share with your team:**
-1. Push this folder to GitHub
-2. Go to [share.streamlit.io](https://share.streamlit.io)
-3. Connect your GitHub repo
-4. Set the main file to `app.py`
-5. Share the URL with your team!
+### Deploy to Google Cloud Run
+
+This app is deployed to **Google Cloud Run** (not Streamlit Cloud). No local Docker required—builds run in the cloud:
+
+```bash
+./deploy-cloud-run-no-docker.sh $(gcloud config get-value project) us-central1
+```
+
+See [docs/GOOGLE_CLOUD_RUN.md](docs/GOOGLE_CLOUD_RUN.md) for prerequisites and details.
 
 ### Command Line Scripts (For Power Users)
 
@@ -138,19 +144,13 @@ JPEG_QUALITY = 82
 
 ## 🚀 Deployment
 
-For complete deployment instructions, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Deployment is to **Google Cloud Run** only. Use the no-Docker script (builds in Google Cloud Build):
 
-### Quick Deploy to Streamlit Cloud
+```bash
+./deploy-cloud-run-no-docker.sh YOUR_PROJECT_ID us-central1
+```
 
-1. **Push to GitHub** - Ensure all files are committed
-2. **Go to** [share.streamlit.io](https://share.streamlit.io)
-3. **Click "New app"** and select:
-   - Your GitHub repo
-   - Branch: `main`
-   - Main file: `app.py`
-4. **Click Deploy!**
-
-**Note:** Streamlit Cloud doesn't support Dockerfiles, so the Image Uploader may have limited functionality. For full Image Uploader support, deploy to Google Cloud Run or another Docker-supporting platform. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for details.
+See [docs/GOOGLE_CLOUD_RUN.md](docs/GOOGLE_CLOUD_RUN.md) for setup and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for more detail.
 
 ---
 
