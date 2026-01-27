@@ -42,7 +42,11 @@ def submit_2fa_code_robust(page, two_factor_code):
         tuple: (success: bool, error: str or None)
     """
     try:
-        # Wait for page to fully load
+        # Wait for Luminate 2FA form to be present before interacting
+        try:
+            page.wait_for_selector('input[name^="ADDITIONAL_AUTH"]', state='visible', timeout=5000)
+        except:
+            pass
         page.wait_for_timeout(1000)
         
         # Strategy 1: Look for ADDITIONAL_AUTH input (specific to Luminate 2FA)
@@ -302,27 +306,15 @@ def login_with_persistent_browser(page, username, password, two_factor_code=None
     # Submit the form
     page.get_by_role("button", name="Log In").click()
     
-    # Wait for navigation
+    # Wait for navigation (stay on current page - do NOT navigate away yet)
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(2000)
     
-    # First, try to verify if login was successful by attempting to access Image Library
-    # This is more reliable than checking URL/content immediately after login
-    try:
-        page.goto(IMAGE_LIBRARY_URL, timeout=10000)
-        page.wait_for_load_state("networkidle")
-        page.wait_for_selector('text=Upload Image', timeout=5000)
-        # Successfully logged in!
-        return (True, False, None)
-    except:
-        # Couldn't access Image Library - might be 2FA or login failed
-        pass
-    
-    # If we can't access Image Library, check if it's 2FA or login error
+    # Check for 2FA and login errors on the CURRENT page before any navigation.
+    # (Navigating to Image Library would leave the 2FA form and break detection.)
     current_url = page.url
     page_content = page.content().lower()
     
-    # Check for explicit 2FA indicators in page content
     two_factor_indicators = [
         'we sent a security code',  # Most specific - from actual 2FA page
         'security code:',  # Label from 2FA form
@@ -336,27 +328,21 @@ def login_with_persistent_browser(page, username, password, two_factor_code=None
     
     has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
     
-    # Check for 2FA-specific HTML elements (most reliable)
     has_2fa_input = False
     try:
-        # Check for ADDITIONAL_AUTH input (Luminate-specific - most reliable indicator)
         auth_inputs = page.locator('input[name^="ADDITIONAL_AUTH"]')
         if auth_inputs.count() > 0 and auth_inputs.first.is_visible():
             has_2fa_input = True
     except:
         pass
     
-    # Only check for multiple password inputs if we're still on login page
-    # (to avoid false positives from other pages)
     still_on_login = 'AdminLogin' in current_url or 'login' in current_url.lower()
     if still_on_login and not has_2fa_input:
         try:
             password_inputs = page.locator('input[type="password"]')
             if password_inputs.count() > 1:
-                # Check if the second password input is the 2FA field
                 second_pwd = password_inputs.nth(1)
                 if second_pwd.is_visible():
-                    # Check if it has ADDITIONAL_AUTH in name or nearby label mentions security code
                     try:
                         input_name = second_pwd.get_attribute('name') or ''
                         if 'ADDITIONAL_AUTH' in input_name.upper() or 'AUTH' in input_name.upper():
@@ -366,7 +352,6 @@ def login_with_persistent_browser(page, username, password, two_factor_code=None
         except:
             pass
     
-    # Check for login errors
     has_error = any(error_term in page_content for error_term in [
         'invalid username or password',
         'incorrect username or password',
@@ -375,27 +360,65 @@ def login_with_persistent_browser(page, username, password, two_factor_code=None
         'invalid credentials'
     ])
     
-    # Only treat as 2FA if we have explicit indicators
-    # Don't use "still_on_login and not has_error" as that's too broad
     if has_2fa_input or (has_2fa_prompt and still_on_login):
-        # 2FA is required
         if two_factor_code:
-            # We have a code, try to submit it
             success, error = submit_2fa_code_robust(page, two_factor_code)
             if success:
                 return (True, False, None)
             else:
                 return (False, True, error or "2FA code submission failed")
         else:
-            # No code provided, return needs_2fa=True
             return (False, True, None)
     
-    # If we have an error, it's a login failure, not 2FA
     if has_error:
         return (False, False, "Login failed. Please check your credentials.")
     
-    # If we're still on login page but no 2FA indicators, might be a redirect delay
-    # Try waiting a bit more and checking again
+    # No 2FA and no login error on current page - try to access Image Library to confirm success
+    try:
+        page.goto(IMAGE_LIBRARY_URL, timeout=10000)
+        page.wait_for_load_state("networkidle")
+        page.wait_for_selector('text=Upload Image', timeout=5000)
+        return (True, False, None)
+    except:
+        pass
+    
+    # Image Library failed - re-check page (we may have been redirected to 2FA or login)
+    current_url = page.url
+    page_content = page.content().lower()
+    has_2fa_prompt = any(indicator in page_content for indicator in two_factor_indicators)
+    has_2fa_input = False
+    try:
+        auth_inputs = page.locator('input[name^="ADDITIONAL_AUTH"]')
+        if auth_inputs.count() > 0 and auth_inputs.first.is_visible():
+            has_2fa_input = True
+    except:
+        pass
+    still_on_login = 'AdminLogin' in current_url or 'login' in current_url.lower()
+    if still_on_login and not has_2fa_input:
+        try:
+            password_inputs = page.locator('input[type="password"]')
+            if password_inputs.count() > 1:
+                second_pwd = password_inputs.nth(1)
+                if second_pwd.is_visible():
+                    try:
+                        input_name = second_pwd.get_attribute('name') or ''
+                        if 'ADDITIONAL_AUTH' in input_name.upper() or 'AUTH' in input_name.upper():
+                            has_2fa_input = True
+                    except:
+                        pass
+        except:
+            pass
+    has_error = any(error_term in page_content for error_term in [
+        'invalid username or password',
+        'incorrect username or password',
+        'login failed',
+        'authentication failed',
+        'invalid credentials'
+    ])
+    if has_2fa_input or (has_2fa_prompt and still_on_login):
+        return (False, True, None)
+    if has_error:
+        return (False, False, "Login failed. Please check your credentials.")
     if still_on_login:
         page.wait_for_timeout(2000)
         try:
@@ -405,8 +428,6 @@ def login_with_persistent_browser(page, username, password, two_factor_code=None
             return (True, False, None)
         except:
             pass
-    
-    # Couldn't determine status - return login failure
     return (False, False, "Login verification failed. Unable to access Image Library.")
 
 
