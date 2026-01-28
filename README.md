@@ -1,174 +1,187 @@
 # Luminate Cookbook
 
-A collection of tools to help you work with Luminate Online. All tools are accessible through a unified web interface.
+A collection of tools for working with Luminate Online, built with FastAPI.
 
-## 🎯 Available Tools
-
-### 🏃 Email Banner Processor
-Transform photos into perfectly-sized email banners with intelligent face detection that avoids cropping heads.
+## Features
 
 ### 📤 Image Uploader
-Batch upload images directly to your Luminate Online Image Library with real-time progress tracking.
+Upload images to your Luminate Online Image Library with **full 2FA support**. Browser sessions stay alive during authentication - no more threading issues!
+
+- Persistent browser sessions for 2FA
+- Progress tracking during uploads
+- Batch upload support
+- Real-time status updates via HTMX
+
+### 🏃 Email Banner Processor
+Transform photos into perfectly-sized email banners with intelligent face detection.
+
+- Automatic face detection to avoid cutting off heads
+- Customizable dimensions and quality
+- Retina-ready 2x versions
+- ZIP download with all processed images
 
 ### 🔍 PageBuilder Decomposer
-Extract all nested PageBuilders from a Luminate Online PageBuilder. Enter a URL or PageBuilder name and download all components as separate HTML files in a ZIP archive.
+Extract all nested PageBuilders from a Luminate Online page.
 
-## 🚀 Quick Start
+- No login required
+- Hierarchical structure visualization
+- Download as ZIP with organized folder structure
+- Option to exclude global stylesheet components
 
-### Local development (no Docker)
+## Tech Stack
 
-Run the app on your machine without Docker or a dev container:
+- **Backend**: FastAPI (Python)
+- **Frontend**: Jinja2 templates + HTMX
+- **Browser Automation**: Playwright
+- **Deployment**: Docker / Google Cloud Run
+
+## Local Development
+
+### Prerequisites
+
+- Python 3.9+
+- Playwright browsers
+
+### Setup
 
 ```bash
+# Clone the repository
+git clone <repo-url>
+cd luminate-cookbook
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
 # Install dependencies
 pip install -r requirements.txt
 
-# Optional: only needed for Image Uploader / Batch Uploader (Playwright)
-python3 -m playwright install chromium
+# Install Playwright browsers
+python -m playwright install chromium
 
 # Run the app
-python3 -m streamlit run app.py
+uvicorn app.main:app --reload --port 8000
 ```
 
-Open **http://localhost:8501** in your browser. Use the sidebar to navigate between tools.
+Visit `http://localhost:8000` in your browser.
 
-### Deploy to Google Cloud Run
+## Deployment
 
-This app is deployed to **Google Cloud Run** (not Streamlit Cloud). No local Docker required—builds run in the cloud:
+### Docker
 
 ```bash
-./deploy-cloud-run-no-docker.sh $(gcloud config get-value project) us-central1
+# Build the image
+docker build -t luminate-cookbook .
+
+# Run the container
+docker run -p 8000:8000 luminate-cookbook
 ```
 
-See [docs/GOOGLE_CLOUD_RUN.md](docs/GOOGLE_CLOUD_RUN.md) for prerequisites and details.
+### Google Cloud Run
 
-### Command Line Scripts (For Power Users)
-
-**Process banners:**
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Put your images in the 'originals/' folder
-# Then run:
-python scripts/process_banners.py
+# Deploy using the provided script
+./deploy-cloud-run.sh YOUR_PROJECT_ID us-central1
 ```
 
-Output will be saved to the `resized/` folder.
+Or set up automatic deployments via Cloud Build - see `cloudbuild.yaml`.
 
-**Upload to Luminate:**
-```bash
-# Set up credentials in .env file
-# Then run:
-python scripts/upload_to_luminate.py
+## API Endpoints
+
+### Upload API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/upload/start` | POST | Start upload session, returns session_id |
+| `/api/upload/2fa/{session_id}` | POST | Submit 2FA code |
+| `/api/upload/status/{session_id}` | GET | Get upload status |
+| `/api/upload/{session_id}` | DELETE | Cancel upload |
+
+### Banner API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/banner/process` | POST | Process images, returns ZIP |
+
+### PageBuilder API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/pagebuilder/analyze` | POST | Analyze structure (preview) |
+| `/api/pagebuilder/decompose` | POST | Decompose and download ZIP |
+
+## Architecture
+
+### 2FA Flow
+
+The key innovation is how 2FA is handled:
+
+1. **Start Upload**: Creates a browser session, attempts login
+2. **2FA Detected**: Browser stays open, session ID returned to client
+3. **Submit Code**: Client submits 2FA code to same session
+4. **Success**: Upload continues with authenticated browser
+
+```
+Client                    FastAPI                 BrowserSessionManager
+  |                          |                           |
+  |-- POST /upload/start --->|                           |
+  |                          |-- create_session() ------>|
+  |                          |                           |-- Create browser
+  |                          |                           |-- Attempt login
+  |                          |                           |-- Detect 2FA
+  |                          |<-- session_id, needs_2fa -|
+  |<-- {session_id, needs_2fa: true}                     |
+  |                          |                           |
+  |   (User enters 2FA code) |                           |
+  |                          |                           |
+  |-- POST /upload/2fa ----->|                           |
+  |                          |-- submit_2fa() ---------->|
+  |                          |                           |-- Submit code
+  |                          |                           |-- Verify success
+  |                          |                           |-- Start uploads
+  |<-- {success: true} ------|<--------------------------|
 ```
 
----
+Browser sessions are managed as persistent server-side objects, not stored in client session state. This eliminates the threading issues that occurred with Streamlit.
 
-## 📐 Features
-
-- **Smart Face Detection** - Automatically detects faces and crops intelligently to avoid cutting off heads
-- **Customizable Dimensions** - Set your own width and height (default: 600×340px)
-- **Filename Prefix** - Add a custom prefix to organize banners by program (e.g., "AGEM123_email_banner_600.jpg")
-- **Retina Support** - Optionally generate 2x resolution images for high-DPI displays
-- **Optimized File Sizes** - JPEG compression tuned for fast email loading
-- **Batch Processing** - Process multiple images at once
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 luminate-cookbook/
-├── app.py                    # Main entry point (Luminate Cookbook)
-├── pages/                    # Multi-page app structure
-│   ├── 1_Email_Banner_Processor.py  # Email banner tool
-│   ├── 2_Image_Uploader.py          # Image uploader tool
-│   └── 3_PageBuilder_Decomposer.py  # PageBuilder decomposer tool
-├── lib/                      # Shared libraries
-│   ├── luminate_uploader_lib.py      # Image upload library
-│   └── pagebuilder_decomposer_lib.py # PageBuilder decomposer library
-├── scripts/                  # CLI scripts
-│   ├── process_banners.py    # CLI banner processing script
-│   └── upload_to_luminate.py # CLI upload script
-├── tests/                    # Test scripts
-│   └── test_playwright.py   # Playwright test script
-├── docs/                     # Documentation
-│   ├── DEPLOYMENT.md        # Comprehensive deployment guide
-│   ├── GOOGLE_CLOUD_RUN.md  # Google Cloud Run specific guide
-│   └── TROUBLESHOOTING.md   # Troubleshooting guide
-├── requirements.txt          # Python dependencies
-├── Dockerfile               # Docker configuration (for deployments)
-├── README.md                 # This file
-├── originals/                # Source images (for CLI)
-└── resized/                  # Output images (from CLI)
+├── app/
+│   ├── main.py              # FastAPI application
+│   ├── config.py            # Configuration settings
+│   ├── services/
+│   │   ├── browser_manager.py   # Browser session management
+│   │   ├── banner_processor.py  # Image processing
+│   │   └── pagebuilder_service.py
+│   ├── models/
+│   │   └── schemas.py       # Pydantic models
+│   ├── templates/           # Jinja2 templates
+│   └── static/              # CSS, JS assets
+├── lib/                     # Shared libraries
+├── Dockerfile
+├── requirements.txt
+└── README.md
 ```
 
-## 🛠️ Adding New Tools
+## Configuration
 
-To add a new tool to the Luminate Cookbook:
+Environment variables:
 
-1. Create a new file in the `pages/` directory
-2. Name it with a number prefix (e.g., `3_Your_Tool.py`)
-3. Add page configuration:
-   ```python
-   st.set_page_config(
-       page_title="Your Tool",
-       page_icon="🔧",
-       layout="wide"
-   )
-   ```
-4. Streamlit will automatically add it to the navigation!
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | 8000 | Server port |
+| `PLAYWRIGHT_BROWSERS_PATH` | (auto) | Playwright browser location |
+| `DEBUG` | false | Enable debug mode |
 
----
+## License
 
-## ⚙️ Configuration
+MIT
 
-### Web App Settings (sidebar)
-- **Width**: 400-1000px (default: 600px)
-- **Height**: 150-600px (default: 340px)
-- **JPEG Quality**: 60-95 (default: 82)
-- **Filename Prefix**: Optional prefix for output files
-- **Retina versions**: On/Off
+## Contributing
 
-### CLI Script Settings (edit `scripts/process_banners.py`)
-```python
-TARGET_WIDTH = 600
-TARGET_HEIGHT = 340
-RETINA_WIDTH = 1200
-RETINA_HEIGHT = 680
-JPEG_QUALITY = 82
-```
-
----
-
-## 🚀 Deployment
-
-Deployment is to **Google Cloud Run** only. Use the no-Docker script (builds in Google Cloud Build):
-
-```bash
-./deploy-cloud-run-no-docker.sh YOUR_PROJECT_ID us-central1
-```
-
-See [docs/GOOGLE_CLOUD_RUN.md](docs/GOOGLE_CLOUD_RUN.md) for setup and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for more detail.
-
----
-
-## 📋 Requirements
-
-- Python 3.8+
-- See `requirements.txt` for packages
-
----
-
-## 🏃 About
-
-Built by the Luminate team. The Luminate Cookbook provides a collection of tools to streamline your workflow with Luminate Online.
-
-**Current Tools:**
-- Email Banner Processor - Create optimized email banners with smart face detection
-- Image Uploader - Batch upload images to Luminate Online Image Library
-- PageBuilder Decomposer - Extract nested PageBuilders as separate HTML files
-
-**More tools coming soon!** 🎉
-
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request

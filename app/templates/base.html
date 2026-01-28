@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ title }}{% endblock %} - Luminate Cookbook</title>
+    
+    <!-- HTMX for dynamic updates -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+    
+    <style>
+        /* Loading indicator for HTMX */
+        .htmx-indicator {
+            opacity: 0;
+            transition: opacity 200ms ease-in;
+        }
+        .htmx-request .htmx-indicator {
+            opacity: 1;
+        }
+        .htmx-request.htmx-indicator {
+            opacity: 1;
+        }
+        
+        /* Smooth transitions */
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+    
+    {% block head %}{% endblock %}
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-6xl mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <a href="/" class="text-xl font-bold text-blue-600 hover:text-blue-700 flex items-center gap-2">
+                    <span>📚</span> Luminate Cookbook
+                </a>
+                <div class="flex gap-4">
+                    <a href="/upload" class="text-gray-600 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/upload' %}text-blue-600 bg-blue-50{% endif %}">
+                        📤 Image Uploader
+                    </a>
+                    <a href="/banner" class="text-gray-600 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/banner' %}text-blue-600 bg-blue-50{% endif %}">
+                        🏃 Banner Processor
+                    </a>
+                    <a href="/pagebuilder" class="text-gray-600 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/pagebuilder' %}text-blue-600 bg-blue-50{% endif %}">
+                        🔍 PageBuilder
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Main content -->
+    <main class="max-w-4xl mx-auto px-4 py-8">
+        {% block content %}{% endblock %}
+    </main>
+    
+    <!-- Footer -->
+    <footer class="border-t bg-white mt-auto">
+        <div class="max-w-6xl mx-auto px-4 py-6 text-center text-gray-500 text-sm">
+            <p>Luminate Cookbook v2.0 - Tools for Luminate Online</p>
+        </div>
+    </footer>
+    
+    <!-- Custom scripts -->
+    <script src="/static/js/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

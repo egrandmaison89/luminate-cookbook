@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Email Banner Processor{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-2">🏃 Email Banner Processor</h1>
+    <p class="text-gray-600">Transform photos into perfectly-sized email banners with intelligent face detection</p>
+</div>
+
+<form id="banner-form" action="/api/banner/process" method="post" enctype="multipart/form-data" class="space-y-6">
+    
+    <!-- Settings -->
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">⚙️ Banner Settings</h2>
+        
+        <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+                <label for="width" class="block text-sm font-medium text-gray-700 mb-1">Width (pixels)</label>
+                <input type="number" id="width" name="width" value="600" min="100" max="2000"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <p class="text-xs text-gray-500 mt-1">Standard email width: 600px</p>
+            </div>
+            
+            <div>
+                <label for="height" class="block text-sm font-medium text-gray-700 mb-1">Height (pixels)</label>
+                <input type="number" id="height" name="height" value="340" min="100" max="1000"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            </div>
+            
+            <div>
+                <label for="quality" class="block text-sm font-medium text-gray-700 mb-1">JPEG Quality</label>
+                <input type="number" id="quality" name="quality" value="82" min="1" max="100"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <p class="text-xs text-gray-500 mt-1">Higher = better quality, larger file</p>
+            </div>
+            
+            <div>
+                <label for="filename_prefix" class="block text-sm font-medium text-gray-700 mb-1">Filename Prefix</label>
+                <input type="text" id="filename_prefix" name="filename_prefix" placeholder="e.g., AGEM123"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" name="include_retina" value="true" checked
+                       class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <span class="text-sm text-gray-700">Include 2x Retina versions</span>
+            </label>
+        </div>
+        
+        <!-- Preview -->
+        <div class="mt-4 p-3 bg-gray-50 rounded-lg">
+            <p class="text-sm text-gray-600">
+                <strong>Output Preview:</strong>
+                <span id="output-preview">Standard: 600×340px | Retina: 1200×680px</span>
+            </p>
+        </div>
+    </div>
+    
+    <!-- File Upload -->
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">📤 Upload Images</h2>
+        
+        <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
+            <input type="file" id="files" name="files" multiple accept=".jpg,.jpeg,.png" required
+                   class="hidden"
+                   onchange="updateBannerFileList(this)">
+            <label for="files" class="cursor-pointer">
+                <div class="text-4xl mb-2">📁</div>
+                <p class="text-gray-600">
+                    <span class="text-blue-600 font-medium">Click to select images</span>
+                    or drag and drop
+                </p>
+                <p class="text-sm text-gray-500 mt-1">JPG, PNG supported</p>
+            </label>
+        </div>
+        
+        <div id="file-list" class="mt-4 hidden">
+            <h3 class="text-sm font-medium text-gray-700 mb-2">Selected Files:</h3>
+            <ul id="file-list-items" class="space-y-1 text-sm text-gray-600"></ul>
+        </div>
+    </div>
+    
+    <!-- Submit Button -->
+    <button type="submit" id="process-btn"
+            class="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+        <span id="process-spinner" class="hidden">
+            <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+        </span>
+        <span id="process-text">🚀 Process All Images</span>
+    </button>
+</form>
+
+<script>
+// Update output preview when settings change
+document.querySelectorAll('#width, #height, input[name="include_retina"]').forEach(el => {
+    el.addEventListener('change', updatePreview);
+});
+
+function updatePreview() {
+    const width = parseInt(document.getElementById('width').value) || 600;
+    const height = parseInt(document.getElementById('height').value) || 340;
+    const retina = document.querySelector('input[name="include_retina"]').checked;
+    
+    let preview = `Standard: ${width}×${height}px`;
+    if (retina) {
+        preview += ` | Retina: ${width*2}×${height*2}px`;
+    }
+    
+    document.getElementById('output-preview').textContent = preview;
+}
+
+function updateBannerFileList(input) {
+    const fileList = document.getElementById('file-list');
+    const fileListItems = document.getElementById('file-list-items');
+    
+    if (input.files.length > 0) {
+        fileList.classList.remove('hidden');
+        fileListItems.innerHTML = '';
+        
+        for (let i = 0; i < input.files.length; i++) {
+            const file = input.files[i];
+            const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="text-gray-800">${file.name}</span> <span class="text-gray-500">(${sizeMB} MB)</span>`;
+            fileListItems.appendChild(li);
+        }
+    } else {
+        fileList.classList.add('hidden');
+    }
+}
+
+// Handle form submission
+document.getElementById('banner-form').addEventListener('submit', function(e) {
+    const btn = document.getElementById('process-btn');
+    const spinner = document.getElementById('process-spinner');
+    const text = document.getElementById('process-text');
+    
+    btn.disabled = true;
+    spinner.classList.remove('hidden');
+    text.textContent = 'Processing...';
+});
+</script>
+{% endblock %}

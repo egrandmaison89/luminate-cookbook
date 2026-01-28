@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block title %}PageBuilder Decomposer{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-2">🔍 PageBuilder Decomposer</h1>
+    <p class="text-gray-600">Extract all nested PageBuilders from a Luminate Online page</p>
+</div>
+
+<!-- Info Box -->
+<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
+    <p class="text-blue-800">
+        <strong>No login required!</strong> Works with any public Luminate Online PageBuilder.
+        Enter a URL or PageBuilder name to extract all nested components.
+    </p>
+</div>
+
+<!-- Input Form -->
+<div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">📝 Enter PageBuilder URL or Name</h2>
+    
+    <div class="space-y-4">
+        <div>
+            <label for="url_or_name" class="block text-sm font-medium text-gray-700 mb-1">
+                PageBuilder URL or Name
+            </label>
+            <input type="text" id="url_or_name" name="url_or_name"
+                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                   placeholder="e.g., imaginedisplay_cancer or full URL">
+        </div>
+        
+        <div>
+            <label for="base_url" class="block text-sm font-medium text-gray-700 mb-1">
+                Base URL
+            </label>
+            <input type="text" id="base_url" name="base_url" value="https://danafarber.jimmyfund.org"
+                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+        </div>
+        
+        <div>
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="ignore_global_stylesheet" checked
+                       class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <span class="text-sm text-gray-700">
+                    Ignore global stylesheet components
+                    <span class="text-gray-500">(recommended)</span>
+                </span>
+            </label>
+        </div>
+    </div>
+</div>
+
+<!-- Action Buttons -->
+<div class="flex gap-4 mb-8">
+    <button onclick="analyzePageBuilder()" id="analyze-btn"
+            class="flex-1 bg-gray-100 text-gray-700 py-3 px-6 rounded-lg font-medium hover:bg-gray-200 transition-colors flex items-center justify-center gap-2">
+        <span id="analyze-spinner" class="hidden">
+            <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+        </span>
+        🔍 Analyze Structure
+    </button>
+    
+    <button onclick="downloadPageBuilder()" id="download-btn"
+            class="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+        <span id="download-spinner" class="hidden">
+            <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+        </span>
+        📥 Download All PageBuilders
+    </button>
+</div>
+
+<!-- Results Container -->
+<div id="results" class="hidden">
+    <!-- Analysis Results -->
+    <div id="analysis-results" class="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">📊 Analysis Results</h2>
+        
+        <!-- Metrics -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="bg-gray-50 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-gray-800" id="total-count">0</div>
+                <div class="text-sm text-gray-600">Total PageBuilders</div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-green-600" id="included-count">0</div>
+                <div class="text-sm text-gray-600">Included</div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-red-600" id="excluded-count">0</div>
+                <div class="text-sm text-gray-600">Excluded</div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-blue-600" id="files-count">0</div>
+                <div class="text-sm text-gray-600">Files to Download</div>
+            </div>
+        </div>
+        
+        <!-- Legend -->
+        <div class="mb-4 text-sm">
+            <span class="text-green-600 font-medium">● Green</span> = Included (will be downloaded) &nbsp;&nbsp;
+            <span class="text-red-600 font-medium">● Red</span> = Excluded (only nested under ignored PageBuilders)
+        </div>
+        
+        <!-- Hierarchy Tree -->
+        <div id="hierarchy-tree" class="bg-gray-50 rounded-lg p-4 font-mono text-sm overflow-x-auto max-h-96 overflow-y-auto">
+            <!-- Tree will be rendered here -->
+        </div>
+    </div>
+</div>
+
+<!-- Error Container -->
+<div id="error-container" class="hidden bg-red-50 border border-red-200 rounded-lg p-6">
+    <div class="flex items-start gap-4">
+        <div class="text-3xl">❌</div>
+        <div>
+            <h3 class="text-lg font-semibold text-red-800 mb-2">Error</h3>
+            <p class="text-red-700" id="error-message"></p>
+        </div>
+    </div>
+</div>
+
+<script>
+async function analyzePageBuilder() {
+    const urlOrName = document.getElementById('url_or_name').value.trim();
+    const baseUrl = document.getElementById('base_url').value.trim();
+    const ignoreGlobalStylesheet = document.getElementById('ignore_global_stylesheet').checked;
+    
+    if (!urlOrName) {
+        showError('Please enter a PageBuilder URL or name');
+        return;
+    }
+    
+    // Show loading
+    const btn = document.getElementById('analyze-btn');
+    const spinner = document.getElementById('analyze-spinner');
+    btn.disabled = true;
+    spinner.classList.remove('hidden');
+    
+    // Hide previous results/errors
+    document.getElementById('results').classList.add('hidden');
+    document.getElementById('error-container').classList.add('hidden');
+    
+    try {
+        const response = await fetch('/api/pagebuilder/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url_or_name: urlOrName,
+                base_url: baseUrl,
+                ignore_global_stylesheet: ignoreGlobalStylesheet
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok || !data.success) {
+            showError(data.error || data.detail || 'Failed to analyze PageBuilder');
+            return;
+        }
+        
+        // Update metrics
+        document.getElementById('total-count').textContent = data.total_components;
+        document.getElementById('included-count').textContent = data.included_components;
+        document.getElementById('excluded-count').textContent = data.excluded_components;
+        document.getElementById('files-count').textContent = data.included_components;
+        
+        // Render hierarchy tree
+        renderHierarchyTree(data.hierarchy, data.components, data.pagename);
+        
+        // Show results
+        document.getElementById('results').classList.remove('hidden');
+        
+    } catch (error) {
+        showError('Network error: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        spinner.classList.add('hidden');
+    }
+}
+
+async function downloadPageBuilder() {
+    const urlOrName = document.getElementById('url_or_name').value.trim();
+    const baseUrl = document.getElementById('base_url').value.trim();
+    const ignoreGlobalStylesheet = document.getElementById('ignore_global_stylesheet').checked;
+    
+    if (!urlOrName) {
+        showError('Please enter a PageBuilder URL or name');
+        return;
+    }
+    
+    // Show loading
+    const btn = document.getElementById('download-btn');
+    const spinner = document.getElementById('download-spinner');
+    btn.disabled = true;
+    spinner.classList.remove('hidden');
+    
+    document.getElementById('error-container').classList.add('hidden');
+    
+    try {
+        const response = await fetch('/api/pagebuilder/decompose', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url_or_name: urlOrName,
+                base_url: baseUrl,
+                ignore_global_stylesheet: ignoreGlobalStylesheet
+            })
+        });
+        
+        if (!response.ok) {
+            const data = await response.json();
+            showError(data.error || data.detail || 'Failed to download PageBuilder');
+            return;
+        }
+        
+        // Download the ZIP file
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = response.headers.get('Content-Disposition')?.split('filename=')[1] || 'pagebuilder.zip';
+        a.click();
+        URL.revokeObjectURL(url);
+        
+    } catch (error) {
+        showError('Network error: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        spinner.classList.add('hidden');
+    }
+}
+
+function showError(message) {
+    document.getElementById('error-message').textContent = message;
+    document.getElementById('error-container').classList.remove('hidden');
+    document.getElementById('results').classList.add('hidden');
+}
+
+function renderHierarchyTree(hierarchy, components, rootName) {
+    const container = document.getElementById('hierarchy-tree');
+    
+    // Build inclusion map
+    const inclusionMap = {};
+    components.forEach(c => {
+        inclusionMap[c.name] = c.is_included;
+    });
+    
+    // Render tree recursively
+    function renderNode(name, level = 0, visited = new Set()) {
+        if (visited.has(name)) {
+            const colorClass = inclusionMap[name] ? 'text-green-600' : 'text-red-600';
+            return `<div style="margin-left: ${level * 20}px" class="${colorClass}">${name} <span class="text-gray-400 italic">(see above)</span></div>`;
+        }
+        
+        visited.add(name);
+        const colorClass = inclusionMap[name] ? 'text-green-600' : 'text-red-600';
+        let html = `<div style="margin-left: ${level * 20}px" class="${colorClass}">${level > 0 ? '├─ ' : ''}${name}</div>`;
+        
+        const children = hierarchy[name] || [];
+        children.forEach(child => {
+            html += renderNode(child, level + 1, visited);
+        });
+        
+        return html;
+    }
+    
+    container.innerHTML = renderNode(rootName);
+}
+</script>
+{% endblock %}

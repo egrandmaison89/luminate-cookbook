@@ -1,26 +1,40 @@
-# DFMC Email Banner Processor Dependencies
+# Luminate Cookbook Dependencies
 # Install with: pip install -r requirements.txt
 
-# Web App
-streamlit>=1.28.0
+# =============================================================================
+# Web Framework - FastAPI
+# =============================================================================
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+jinja2>=3.1.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
 
+# =============================================================================
 # Image Processing
+# =============================================================================
 Pillow>=10.0.0
 opencv-python-headless>=4.8.0
 numpy>=1.24.0
 
-# For local CLI script (process_banners.py)
-# These are also included above, so no additional installs needed
-
-# Browser automation for Luminate uploads
-# Note: Playwright Python package installs via pip, but browsers must be installed separately
-# The app handles missing Playwright gracefully - it will show an error message instead of crashing
-# If Playwright installation fails on Streamlit Cloud, the app will still start and show a helpful error message
+# =============================================================================
+# Browser Automation (for Luminate uploads)
+# =============================================================================
 playwright>=1.40.0; python_version >= "3.8"
-python-dotenv>=1.0.0
+
+# =============================================================================
+# HTTP Client
+# =============================================================================
 requests>=2.28.0
+httpx>=0.26.0
 
-# Optional: For persistent session storage on Google Cloud Run
-# Uncomment if deploying to Cloud Run and want sessions to persist across instances
+# =============================================================================
+# Utilities
+# =============================================================================
+python-dotenv>=1.0.0
+
+# =============================================================================
+# Optional: Google Cloud Storage (for Cloud Run session persistence)
+# =============================================================================
 # google-cloud-storage>=2.10.0
-

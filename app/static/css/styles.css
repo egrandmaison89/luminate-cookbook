@@ -1,0 +1,147 @@
+/* Luminate Cookbook - Custom Styles */
+
+/* Smooth page transitions */
+body {
+    transition: opacity 0.2s ease-in-out;
+}
+
+/* Loading states */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* File upload dropzone */
+.dropzone-active {
+    border-color: #3b82f6 !important;
+    background-color: #eff6ff !important;
+}
+
+/* Progress bar animation */
+.progress-bar {
+    transition: width 0.3s ease-in-out;
+}
+
+/* URL copy feedback */
+.copy-success {
+    background-color: #dcfce7 !important;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+}
+
+/* Focus styles */
+input:focus, button:focus, select:focus, textarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+/* Tree visualization for PageBuilder */
+.tree-node {
+    position: relative;
+    padding-left: 1.5em;
+}
+
+.tree-node::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-color: #e5e7eb;
+}
+
+.tree-node::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.75em;
+    width: 1em;
+    height: 1px;
+    background-color: #e5e7eb;
+}
+
+.tree-node:last-child::before {
+    height: 0.75em;
+}
+
+/* Included/excluded styling */
+.tree-included {
+    color: #16a34a;
+}
+
+.tree-excluded {
+    color: #dc2626;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+.pulse {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+/* Banner preview grid */
+.banner-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.banner-preview {
+    aspect-ratio: 16/9;
+    object-fit: cover;
+    border-radius: 0.5rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+    .nav-links {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .grid-cols-2 {
+        grid-template-columns: 1fr;
+    }
+}

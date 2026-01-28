@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Image Uploader{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-2">📤 Image Uploader</h1>
+    <p class="text-gray-600">Upload images to your Luminate Online Image Library</p>
+</div>
+
+<!-- Info Box -->
+<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
+    <p class="text-blue-800">
+        <strong>🔐 2FA Support:</strong> If two-factor authentication is required, your browser session stays
+        open while you enter your code. No need to start over!
+    </p>
+</div>
+
+<!-- Upload Form -->
+<form id="upload-form" 
+      hx-post="/api/upload/start" 
+      hx-target="#upload-status" 
+      hx-swap="innerHTML"
+      hx-encoding="multipart/form-data"
+      class="space-y-6">
+    
+    <!-- Step 1: Credentials -->
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">Step 1: Enter Your Luminate Credentials</h2>
+        <div class="grid md:grid-cols-2 gap-4">
+            <div>
+                <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                <input type="text" id="username" name="username" required
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                       placeholder="your.email@example.com">
+            </div>
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <input type="password" id="password" name="password" required
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                       placeholder="••••••••">
+            </div>
+        </div>
+    </div>
+    
+    <!-- Step 2: File Selection -->
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">Step 2: Select Images to Upload</h2>
+        <p class="text-sm text-gray-600 mb-4">
+            💡 Each file should be under {{ max_file_size_mb }}MB. Supported formats: JPG, PNG, GIF
+        </p>
+        
+        <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
+            <input type="file" id="files" name="files" multiple accept=".jpg,.jpeg,.png,.gif" required
+                   class="hidden"
+                   onchange="updateFileList(this)">
+            <label for="files" class="cursor-pointer">
+                <div class="text-4xl mb-2">📁</div>
+                <p class="text-gray-600">
+                    <span class="text-blue-600 font-medium">Click to select files</span>
+                    or drag and drop
+                </p>
+                <p class="text-sm text-gray-500 mt-1">Multiple files supported</p>
+            </label>
+        </div>
+        
+        <!-- File list preview -->
+        <div id="file-list" class="mt-4 hidden">
+            <h3 class="text-sm font-medium text-gray-700 mb-2">Selected Files:</h3>
+            <ul id="file-list-items" class="space-y-1 text-sm text-gray-600"></ul>
+        </div>
+    </div>
+    
+    <!-- Submit Button -->
+    <button type="submit" id="submit-btn"
+            class="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+        <span class="htmx-indicator">
+            <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </span>
+        <span>🚀 Upload All Images</span>
+    </button>
+</form>
+
+<!-- Status Container (updated via HTMX) -->
+<div id="upload-status" class="mt-8"></div>
+
+<script>
+function updateFileList(input) {
+    const fileList = document.getElementById('file-list');
+    const fileListItems = document.getElementById('file-list-items');
+    
+    if (input.files.length > 0) {
+        fileList.classList.remove('hidden');
+        fileListItems.innerHTML = '';
+        
+        for (let i = 0; i < input.files.length; i++) {
+            const file = input.files[i];
+            const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="text-gray-800">${file.name}</span> <span class="text-gray-500">(${sizeMB} MB)</span>`;
+            fileListItems.appendChild(li);
+        }
+    } else {
+        fileList.classList.add('hidden');
+    }
+}
+
+// Handle form response and set up polling
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'upload-status') {
+        // Check if we need to start polling
+        const statusDiv = document.getElementById('upload-status');
+        const sessionId = statusDiv.dataset.sessionId;
+        if (sessionId) {
+            // Start polling for status updates
+            startPolling(sessionId);
+        }
+    }
+});
+
+function startPolling(sessionId) {
+    const statusDiv = document.getElementById('upload-status');
+    statusDiv.setAttribute('hx-get', `/api/upload/status/${sessionId}/partial`);
+    statusDiv.setAttribute('hx-trigger', 'every 2s');
+    statusDiv.setAttribute('hx-swap', 'innerHTML');
+    htmx.process(statusDiv);
+}
+</script>
+{% endblock %}

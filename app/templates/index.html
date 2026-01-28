@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="text-center mb-12">
+    <h1 class="text-4xl font-bold text-gray-800 mb-4">📚 Luminate Cookbook</h1>
+    <p class="text-xl text-gray-600">A collection of tools to help you work with Luminate Online</p>
+</div>
+
+<div class="grid md:grid-cols-2 gap-6">
+    <!-- Image Uploader -->
+    <a href="/upload" class="block p-6 bg-white rounded-xl shadow-sm border-2 border-transparent hover:border-blue-500 hover:shadow-md transition-all">
+        <div class="flex items-start gap-4">
+            <div class="text-4xl">📤</div>
+            <div>
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">Image Uploader</h2>
+                <p class="text-gray-600">
+                    Upload images to your Luminate Online Image Library with full 2FA support.
+                    Browser sessions stay alive during authentication.
+                </p>
+                <span class="inline-block mt-3 text-blue-600 font-medium">
+                    Start Uploading →
+                </span>
+            </div>
+        </div>
+    </a>
+    
+    <!-- Banner Processor -->
+    <a href="/banner" class="block p-6 bg-white rounded-xl shadow-sm border-2 border-transparent hover:border-blue-500 hover:shadow-md transition-all">
+        <div class="flex items-start gap-4">
+            <div class="text-4xl">🏃</div>
+            <div>
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">Email Banner Processor</h2>
+                <p class="text-gray-600">
+                    Transform photos into perfectly-sized email banners with intelligent face detection.
+                    Includes Retina-ready versions.
+                </p>
+                <span class="inline-block mt-3 text-blue-600 font-medium">
+                    Process Banners →
+                </span>
+            </div>
+        </div>
+    </a>
+    
+    <!-- PageBuilder Decomposer -->
+    <a href="/pagebuilder" class="block p-6 bg-white rounded-xl shadow-sm border-2 border-transparent hover:border-blue-500 hover:shadow-md transition-all">
+        <div class="flex items-start gap-4">
+            <div class="text-4xl">🔍</div>
+            <div>
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">PageBuilder Decomposer</h2>
+                <p class="text-gray-600">
+                    Extract all nested PageBuilders from a Luminate Online page.
+                    Download as separate HTML files. No login required.
+                </p>
+                <span class="inline-block mt-3 text-blue-600 font-medium">
+                    Decompose PageBuilder →
+                </span>
+            </div>
+        </div>
+    </a>
+    
+    <!-- Coming Soon -->
+    <div class="p-6 bg-gray-100 rounded-xl border-2 border-dashed border-gray-300">
+        <div class="flex items-start gap-4 opacity-60">
+            <div class="text-4xl">🎉</div>
+            <div>
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">More Tools Coming</h2>
+                <p class="text-gray-600">
+                    We're working on more tools to help you work with Luminate Online.
+                    Stay tuned for updates!
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-12 p-6 bg-blue-50 rounded-xl">
+    <h3 class="text-lg font-semibold text-blue-800 mb-2">🚀 Quick Start</h3>
+    <ol class="list-decimal list-inside text-blue-700 space-y-2">
+        <li>Click on any tool above to get started</li>
+        <li><strong>Image Uploader</strong>: Enter credentials, select images, upload to Luminate</li>
+        <li><strong>Banner Processor</strong>: Upload images, adjust settings, download optimized banners</li>
+        <li><strong>PageBuilder Decomposer</strong>: Enter URL or name, download all nested PageBuilders</li>
+    </ol>
+</div>
+{% endblock %}
