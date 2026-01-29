@@ -23,24 +23,42 @@ Complete guide for deploying the Luminate Cookbook application to various platfo
 
 ### Files Required for Deployment
 
-- `app.py` - Main entry point
-- `pages/` - All page modules
-  - `pages/1_Email_Banner_Processor.py`
-  - `pages/2_Image_Uploader.py`
-  - `pages/3_PageBuilder_Decomposer.py`
-- `lib/` - Shared libraries
-  - `lib/luminate_uploader_lib.py`
-  - `lib/pagebuilder_decomposer_lib.py`
+**FastAPI Application** (current architecture):
+- `app/main.py` - FastAPI application entry point
+- `app/config.py` - Configuration with Pydantic Settings
+- `app/services/` - Core business logic
+  - `browser_manager.py` - Persistent browser sessions for 2FA
+  - `banner_processor.py` - Image processing with face detection
+  - `email_beautifier.py` - Plain text email beautification
+  - `pagebuilder_service.py` - PageBuilder decomposition wrapper
+- `app/models/schemas.py` - Pydantic request/response models
+- `app/templates/` - Jinja2 HTML templates
+- `app/static/` - CSS and JavaScript assets
+- `lib/` - Reusable libraries
+  - `luminate_uploader_lib.py` - Core Luminate interaction
+  - `pagebuilder_decomposer_lib.py` - PageBuilder parsing engine
 - `requirements.txt` - Python dependencies
-- `Dockerfile` - For Docker-based deployments (optional)
+- `Dockerfile` - **Required** for Cloud Run (Playwright dependencies)
+- `cloudbuild.yaml` - Cloud Build configuration (optional)
+- `deploy-cloud-run.sh` - Deployment automation script
 
 ---
 
-## Streamlit Cloud Deployment
+## ⚠️ Deployment Update
+
+**This application has been migrated from Streamlit to FastAPI.** The sections below referencing Streamlit Cloud are outdated and kept for historical reference only.
+
+**Current Deployment Platform**: Google Cloud Run (see below for instructions)
+
+---
+
+## ~~Streamlit Cloud Deployment~~ (Deprecated)
 
 ### Overview
 
-Streamlit Cloud is the easiest deployment option for the Email Banner Processor and PageBuilder Decomposer. **Note:** Streamlit Cloud does NOT support Dockerfiles, so the Image Uploader may have limited functionality.
+**Note**: This section is outdated. The application no longer uses Streamlit. All functionality has been migrated to FastAPI with improved architecture.
+
+~~Streamlit Cloud is the easiest deployment option for the Email Banner Processor and PageBuilder Decomposer. **Note:** Streamlit Cloud does NOT support Dockerfiles, so the Image Uploader may have limited functionality.~~
 
 ### Step 1: Prepare Your Repository
 
@@ -115,11 +133,24 @@ If deployment has issues:
 
 ---
 
-## Google Cloud Run Deployment
+## Google Cloud Run Deployment (Current)
 
 ### Overview
 
-Google Cloud Run provides full Docker support, making it ideal for the Image Uploader with Playwright. Free tier: 2 million requests/month.
+**Primary deployment platform for this application.** Google Cloud Run provides:
+
+- ✅ Full Docker support (all Playwright dependencies)
+- ✅ Auto-scaling from 0 to N instances
+- ✅ Generous free tier: 2 million requests/month
+- ✅ All four tools fully functional
+- ✅ Built-in load balancing and HTTPS
+- ✅ Excellent performance for browser automation
+
+**Why Cloud Run?**
+1. **Playwright Requirements**: Needs full system dependencies that only Docker can provide
+2. **Resource Control**: Can allocate exactly 2Gi memory + 2 CPU cores for Chromium
+3. **Cost Efficiency**: Pay only for actual usage, auto-scales to zero
+4. **Production Ready**: Proper monitoring, logging, and health checks
 
 ### Prerequisites
 
@@ -399,51 +430,123 @@ gcloud run services logs read luminate-cookbook --region us-central1
 
 ## Pre-Deployment Checklist
 
-### Files Ready for Deployment
+### ✅ Application Ready
 
-- [x] `app.py` - Main entry point
-- [x] `pages/1_Email_Banner_Processor.py` - Email Banner tool
-- [x] `pages/2_Image_Uploader.py` - Image Uploader tool
-- [x] `pages/3_PageBuilder_Decomposer.py` - PageBuilder Decomposer tool
-- [x] `lib/luminate_uploader_lib.py` - Shared upload library
-- [x] `lib/pagebuilder_decomposer_lib.py` - Shared decomposer library
-- [x] `requirements.txt` - All dependencies (includes streamlit>=1.28.0)
-- [x] `Dockerfile` - For Docker deployments (optional)
-- [x] `.dockerignore` - Optimizes Docker builds (optional)
+All files are production-ready and tested:
 
-### Dependencies Verified
+**Core Application**:
+- [x] `app/main.py` - FastAPI application with all routes
+- [x] `app/config.py` - Environment-based configuration
+- [x] `app/services/` - All four service modules
+- [x] `app/models/schemas.py` - Pydantic models
+- [x] `app/templates/` - All HTML templates
+- [x] `lib/` - Reusable business logic libraries
 
-- streamlit>=1.28.0 (supports st.Page and st.navigation)
-- Pillow>=10.0.0
-- opencv-python-headless>=4.8.0
-- numpy>=1.24.0
-- playwright>=1.40.0
-- python-dotenv>=1.0.0
-- requests>=2.28.0
+**Deployment Files**:
+- [x] `Dockerfile` - Multi-stage build with Playwright dependencies
+- [x] `requirements.txt` - All Python dependencies pinned
+- [x] `cloudbuild.yaml` - Cloud Build configuration
+- [x] `deploy-cloud-run.sh` - Automated deployment script
+- [x] `.dockerignore` - Optimized for faster builds
+
+**Documentation**:
+- [x] `README.md` - Complete architecture documentation
+- [x] `docs/DEPLOYMENT.md` - This file
+- [x] `docs/GOOGLE_CLOUD_RUN.md` - Detailed Cloud Run guide
+- [x] `DEPLOY_NOW.md` - Quick start guide
+
+### Dependencies (Production)
+
+```txt
+# Web Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+jinja2>=3.1.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Image Processing
+Pillow>=10.0.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+
+# Browser Automation
+playwright>=1.40.0
+
+# HTTP Client
+requests>=2.28.0
+httpx>=0.26.0
+
+# Utilities
+python-dotenv>=1.0.0
+```
+
+**Note**: Streamlit has been **removed** from dependencies.
 
 ### Post-Deployment Verification
 
-After deployment, test:
+After deployment, test all four tools systematically:
 
-1. **Home Page**
-   - Shows "Luminate Cookbook" title
-   - Navigation menu visible in sidebar
-   - Tool cards displayed
+#### 1. Home Page
+- ✅ Navigate to `https://your-app-url.run.app/`
+- ✅ "Luminate Cookbook" title visible
+- ✅ Four tool cards displayed with descriptions
+- ✅ Navigation links functional
+- ✅ Check `/docs` for interactive API documentation
 
-2. **Email Banner Processor**
-   - Page loads with banner settings
-   - File upload works
-   - Processing functions correctly
+#### 2. Image Uploader (Critical - Tests 2FA)
+- ✅ Navigate to `/upload`
+- ✅ Enter Luminate credentials
+- ✅ Select 1-2 test images
+- ✅ Click "Upload All Images"
+- ✅ **If 2FA required**: 
+  - Verify "Two-factor authentication required" message appears
+  - Enter 6-digit code from authenticator app
+  - Verify upload continues without session loss
+- ✅ Check Luminate Image Library for uploaded files
+- ✅ Verify image URLs are accessible
 
-3. **Image Uploader**
-   - Page loads with credential form
-   - File upload works (if Playwright available)
-   - Playwright browsers available (may take first load to install)
+#### 3. Email Banner Processor
+- ✅ Navigate to `/banner`
+- ✅ Upload test photo with visible face(s)
+- ✅ Verify face detection count displayed
+- ✅ Adjust dimensions (e.g., 600x340)
+- ✅ Enable retina version
+- ✅ Click "Process Images"
+- ✅ Download ZIP file
+- ✅ Verify ZIP contains both standard and @2x versions
+- ✅ Verify images are properly cropped with faces visible
 
-4. **PageBuilder Decomposer**
-   - Page loads with input form
-   - Decomposition works
-   - ZIP download works
+#### 4. PageBuilder Decomposer
+- ✅ Navigate to `/pagebuilder`
+- ✅ Enter test PageBuilder URL or name
+- ✅ Click "Analyze Structure" to preview hierarchy
+- ✅ Verify component tree displays
+- ✅ Click "Decompose & Download"
+- ✅ Download ZIP file
+- ✅ Verify ZIP contains HTML files with proper folder structure
+- ✅ Verify nested PageBuilders are extracted
+
+#### 5. Plain Text Email Beautifier
+- ✅ Navigate to `/email-beautifier`
+- ✅ Paste sample plain text email
+- ✅ Enable all options (strip tracking, format CTAs, markdown links)
+- ✅ Click "Beautify"
+- ✅ Verify tracking parameters removed from URLs
+- ✅ Verify CTAs formatted with >>> arrows <<<
+- ✅ Verify footer cleaned and simplified
+- ✅ Check stats display (URLs cleaned, CTAs formatted, etc.)
+
+#### Health Check
+- ✅ Navigate to `/health`
+- ✅ Verify returns: `{"status": "healthy", "app": "Luminate Cookbook", "active_sessions": 0}`
+
+#### Performance Verification
+- ✅ Check Cloud Run metrics for cold start time (<30s)
+- ✅ Verify memory usage stays under 2Gi
+- ✅ Check logs for any errors or warnings
+- ✅ Test concurrent access (multiple tabs/users)
 
 ---
 

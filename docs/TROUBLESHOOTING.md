@@ -1,8 +1,250 @@
-# Troubleshooting: Streamlit Cloud Access Error
+# Troubleshooting Guide - Luminate Cookbook
 
-## Error: "You do not have access to this app or it does not exist"
+## ⚠️ Application Architecture Update
 
-This error typically means Streamlit Cloud can't access your GitHub repository. Here's how to fix it:
+**Current Platform**: Google Cloud Run with FastAPI  
+**Previous Platform**: Streamlit Cloud (deprecated)
+
+This document covers troubleshooting for the current FastAPI implementation deployed on Google Cloud Run. Historical Streamlit issues are preserved at the bottom for reference.
+
+---
+
+## Common Issues (FastAPI on Cloud Run)
+
+### 1. Browser Session Issues
+
+#### Issue: "Session not found or expired"
+
+**When it happens**: After entering credentials and trying to submit 2FA code.
+
+**Root Causes**:
+1. **Session timeout**: Default 10-minute expiration
+2. **Cloud Run multi-instance routing**: Sessions are stored in memory, not shared across instances
+3. **Manual cancellation**: User or another tab cancelled the session
+
+**Solutions**:
+
+**Short-term** (Single-instance mode):
+```bash
+# Force single instance to avoid routing issues
+gcloud run services update luminate-cookbook \
+    --max-instances 1 \
+    --min-instances 1 \
+    --region us-central1
+```
+
+**Long-term** (Multi-instance with session persistence):
+1. Add Redis/Memorystore for session storage
+2. Update `browser_manager.py` to serialize session state
+3. Store browser session IDs with instance affinity headers
+
+**Workaround**:
+- Complete 2FA within 10 minutes
+- Use same browser tab throughout the flow
+- Don't refresh the page after starting upload
+
+---
+
+### 2. Playwright Browser Issues
+
+#### Issue: "Browser launch failed" or "Chromium could not be found"
+
+**Symptoms**:
+- Image Uploader fails to initialize
+- Logs show Playwright installation errors
+- Container crashes during browser launch
+
+**Root Causes**:
+1. Docker build didn't complete system dependencies install
+2. `PLAYWRIGHT_BROWSERS_PATH` incorrect
+3. Insufficient memory (Chromium needs 200MB+)
+
+**Solutions**:
+
+**Verify Docker build**:
+```bash
+# Rebuild with verbose logging
+docker build -t luminate-cookbook:test . --progress=plain
+
+# Check Playwright installation
+docker run --rm luminate-cookbook:test python -c "from playwright.sync_api import sync_playwright; print('OK')"
+```
+
+**Check environment variables**:
+```bash
+gcloud run services describe luminate-cookbook \
+    --region us-central1 \
+    --format='value(spec.template.spec.containers[0].env)'
+```
+
+Should include: `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`
+
+**Memory allocation**:
+```bash
+# Ensure at least 2Gi memory
+gcloud run services update luminate-cookbook \
+    --memory 2Gi \
+    --region us-central1
+```
+
+---
+
+### 3. Upload Verification Failures
+
+#### Issue: "Upload completed but verification failed"
+
+**Symptoms**:
+- Files appear uploaded in Playwright
+- But verification GET request returns 404
+- Image not accessible at expected URL
+
+**Root Causes**:
+1. **Timing issue**: File not yet propagated to CDN (Luminate's infrastructure)
+2. **Filename mismatch**: Luminate may rename files with special characters
+3. **Permission issue**: File uploaded to wrong folder or not public
+
+**Solutions**:
+
+**Increase retry attempts** in `browser_manager.py`:
+```python
+# Current: 2 retries with 2s delay
+# Change to: 5 retries with 3s delay
+for _ in range(5):
+    page.wait_for_timeout(3000)
+    # ... verification logic
+```
+
+**Manual verification**:
+1. Log into Luminate admin
+2. Navigate to Image Library
+3. Check if file exists but with different name
+4. Try direct URL: `https://danafarber.jimmyfund.org/images/content/pagebuilder/FILENAME.jpg`
+
+---
+
+### 4. Face Detection Not Working
+
+#### Issue: Banner processor crops off faces
+
+**Symptoms**:
+- Face count shows 0 when faces are clearly visible
+- Crop region doesn't preserve faces
+- Output images have heads cut off
+
+**Root Causes**:
+1. **Poor photo quality**: Low resolution or blurry faces
+2. **Lighting issues**: Overexposed or underexposed faces
+3. **Angle issues**: Profile shots or tilted heads
+4. **OpenCV cascade limitations**: Haar Cascade only detects frontal faces
+
+**Solutions**:
+
+**Check input image**:
+- Minimum recommended resolution: 1200px width
+- Frontal face angles work best
+- Good lighting and contrast
+
+**Adjust detection parameters** in `banner_processor.py`:
+```python
+# More sensitive detection (more false positives)
+faces = face_cascade.detectMultiScale(
+    gray,
+    scaleFactor=1.05,  # Lower = more sensitive (default 1.1)
+    minNeighbors=3,    # Lower = more detections (default 5)
+    minSize=(20, 20),  # Smaller minimum (default 30, 30)
+)
+```
+
+**Fallback**: If face detection fails, manual crop is better than center crop
+- Consider adding manual crop region selection in UI
+- Or use center-weighted crop as fallback
+
+---
+
+### 5. Cloud Run Cold Start Delays
+
+#### Issue: First request takes 30+ seconds
+
+**Symptoms**:
+- Initial page load very slow
+- Subsequent requests fast
+- Happens after 15 minutes of inactivity
+
+**Root Causes**:
+1. **Serverless architecture**: Container starts from scratch
+2. **Playwright browser size**: 300MB Chromium download
+3. **Python imports**: NumPy, OpenCV, etc. take time to load
+
+**Solutions**:
+
+**Keep instances warm** with Cloud Scheduler:
+```bash
+# Ping /health every 5 minutes
+gcloud scheduler jobs create http keep-luminate-warm \
+    --schedule="*/5 * * * *" \
+    --uri="https://your-app-url.run.app/health" \
+    --http-method=GET \
+    --location=us-central1
+```
+
+**Set minimum instances** (costs ~$10/month):
+```bash
+gcloud run services update luminate-cookbook \
+    --min-instances 1 \
+    --region us-central1
+```
+
+**Optimize Docker image**:
+- Use multi-stage builds (already done)
+- Remove unused system packages
+- Consider using distroless base images (advanced)
+
+---
+
+### 6. Memory Limit Exceeded
+
+#### Issue: Container killed with "Memory limit exceeded"
+
+**Symptoms**:
+- Upload fails midway
+- Logs show OOM (out of memory)
+- Cloud Run metrics show memory spike
+
+**Root Causes**:
+1. **Too many concurrent sessions**: More than 10 browser instances
+2. **Memory leak**: Browser not cleaned up properly
+3. **Large images**: Processing many high-res images simultaneously
+
+**Solutions**:
+
+**Verify session limits**:
+```bash
+# Check active sessions
+curl https://your-app-url.run.app/health
+# Should show: "active_sessions": <10
+```
+
+**Increase memory**:
+```bash
+gcloud run services update luminate-cookbook \
+    --memory 4Gi \
+    --region us-central1
+```
+
+**Monitor cleanup**:
+- Check logs for cleanup task running every 30 seconds
+- Verify sessions expire after 10 minutes
+- Ensure browser objects are being closed
+
+---
+
+## Deprecated Issues (Historical - Streamlit)
+
+### ~~Error: "You do not have access to this app or it does not exist"~~
+
+**Status**: Application no longer uses Streamlit Cloud
+
+**Historical context**: This error occurred when Streamlit Cloud couldn't access GitHub repositories. The migration to FastAPI eliminated this entire class of deployment issues.
 
 ## Solution Steps
 

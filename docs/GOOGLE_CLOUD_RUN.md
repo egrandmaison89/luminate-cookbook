@@ -145,19 +145,37 @@ Every push to `main` will automatically:
 
 ### Memory and CPU
 
-The deployment uses:
-- **Memory**: 2Gi (required for Playwright)
-- **CPU**: 2 (recommended for Playwright)
-- **Timeout**: 300 seconds (5 minutes)
+The deployment uses carefully chosen resource allocations based on actual Playwright requirements:
 
-To change these:
+- **Memory**: 2Gi (minimum required)
+  - Chromium browser: ~200-400MB per session
+  - Browser automation overhead: ~100MB
+  - FastAPI + dependencies: ~150MB
+  - Buffer for concurrent sessions: ~1.2Gi
+- **CPU**: 2 cores (recommended)
+  - 1 core: Adequate for light usage but slower page loads
+  - 2 cores: Optimal for typical usage (sub-second response)
+  - 4 cores: Overkill for this workload
+- **Timeout**: 300-600 seconds
+  - Standard: 300s (5 minutes) for most operations
+  - Extended: 600s (10 minutes) if users need time for 2FA
+- **Max Instances**: 10 (prevents cost overruns)
+- **Concurrency**: 80 requests per instance (Cloud Run default)
+
+**Cost Optimization**: We limit to 10 concurrent browser sessions per instance via `MAX_CONCURRENT_SESSIONS=10` in code, preventing memory exhaustion while keeping Cloud Run's default 80 concurrent requests for non-browser endpoints (health checks, API calls, etc.).
+
+To adjust resources:
 
 ```bash
 gcloud run services update luminate-cookbook \
-    --memory 4Gi \
-    --cpu 4 \
+    --memory 2Gi \
+    --cpu 2 \
+    --timeout 600 \
+    --max-instances 10 \
     --region us-central1
 ```
+
+**Important**: Do not reduce memory below 2Gi or Cloud Run will kill the container during browser operations.
 
 ### Custom Domain
 
@@ -302,13 +320,15 @@ gcloud run services update luminate-cookbook \
 ## Next Steps
 
 1. ✅ Deploy to Cloud Run
-2. ✅ Test all three tools:
-   - Email Banner Processor
-   - Image Uploader (should work now!)
-   - PageBuilder Decomposer
+2. ✅ Test all four tools:
+   - Image Uploader (with full 2FA support!)
+   - Email Banner Processor (with face detection)
+   - PageBuilder Decomposer (with hierarchy visualization)
+   - Plain Text Email Beautifier (with URL cleaning)
 3. ✅ Set up custom domain (optional)
 4. ✅ Configure monitoring alerts (optional)
 5. ✅ Share the URL with your team!
+6. ✅ Review `/docs` endpoint for API documentation
 
 ## Support
 

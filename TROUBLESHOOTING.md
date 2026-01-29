@@ -1,64 +1,86 @@
-# Troubleshooting: Streamlit Cloud Access Error
+# Troubleshooting Guide
 
-## Error: "You do not have access to this app or it does not exist"
+## ⚠️ Note: Application Migrated to FastAPI
 
-This error typically means Streamlit Cloud can't access your GitHub repository. Here's how to fix it:
+This application has been migrated from Streamlit to FastAPI. Streamlit Cloud troubleshooting sections below are kept for historical reference only.
 
-## Solution Steps
+Current deployment platform: **Google Cloud Run**
 
-### Step 1: Verify Repository is Public
-1. Go to https://github.com/egrandmaison89/luminate-cookbook
-2. Check that the repository shows "Public" (not "Private")
-3. If it's private, either:
-   - Make it public: Settings → Scroll down → Change visibility → Make public
-   - OR upgrade to Streamlit Cloud for Teams (paid) to use private repos
+---
 
-### Step 2: Reauthorize Streamlit's GitHub Access
-1. Go to GitHub: https://github.com/settings/applications
-2. Click "Authorized OAuth Apps" (left sidebar)
-3. Find "Streamlit" in the list
-4. Click on it
-5. Click "Revoke" to remove old permissions
-6. Go back to Streamlit Cloud: https://share.streamlit.io
-7. Try to create/edit your app - it will prompt you to reauthorize GitHub
-8. Grant Streamlit access to your repositories
+## Current Issues (FastAPI on Cloud Run)
 
-### Step 3: Verify App Configuration
-In Streamlit Cloud dashboard:
-1. Make sure the repository is: `egrandmaison89/luminate-cookbook`
-2. Branch: `main`
-3. Main file: `app.py`
+### Issue: 2FA Session Not Found
 
-### Step 4: Delete and Recreate App (If Needed)
-If the above doesn't work:
-1. Delete the app in Streamlit Cloud
-2. Create a new app
-3. Select repository: `egrandmaison89/luminate-cookbook`
-4. Branch: `main`
-5. Main file path: `app.py`
-6. Deploy
+**Symptom**: After entering credentials, you get "Session not found or expired" when submitting 2FA code.
 
-## Common Issues
+**Cause**: Session expired (10-minute timeout) or multiple Cloud Run instances causing session routing issues.
 
-**Repository name mismatch:**
-- Your local repo might be `luminate-email-banners`
-- But Streamlit is looking for `luminate-cookbook`
-- Make sure Streamlit Cloud is pointing to the correct repository name
+**Solution**:
+1. Check if more than 10 minutes passed between login and 2FA submission
+2. If using multiple tabs, ensure you're in the same tab that initiated the session
+3. For Cloud Run multi-instance: Session IDs are instance-local. We need to add session persistence (Redis/Memorystore) for multi-instance deployments
+4. Temporary workaround: Set `--max-instances 1` in Cloud Run to force single instance
 
-**GitHub account mismatch:**
-- Ensure you're signed into Streamlit Cloud with the same GitHub account (`egrandmaison89`)
-- Check that the repository owner matches your GitHub username
+```bash
+gcloud run services update luminate-cookbook \
+    --max-instances 1 \
+    --region us-central1
+```
 
-**OAuth permissions:**
-- Streamlit needs permission to read your repositories
-- Revoking and reauthorizing usually fixes this
+### Issue: "Memory limit exceeded" in Cloud Run Logs
 
-## Still Not Working?
+**Symptom**: Cloud Run kills the container during uploads.
 
-1. Check Streamlit Cloud status: https://status.streamlit.io/
-2. Check GitHub repository settings for any restrictions
-3. Try accessing the repository directly: https://github.com/egrandmaison89/luminate-cookbook
-4. Verify `app.py` exists in the root of the `main` branch
+**Cause**: Multiple concurrent browser sessions exceeding 2Gi memory allocation.
+
+**Solution**:
+1. Verify `MAX_CONCURRENT_SESSIONS=10` in configuration
+2. Increase memory allocation if needed:
+```bash
+gcloud run services update luminate-cookbook \
+    --memory 4Gi \
+    --region us-central1
+```
+3. Check active sessions via `/health` endpoint
+
+### Issue: Slow Cold Starts (30+ seconds)
+
+**Symptom**: First request after idle period takes a long time.
+
+**Cause**: Cloud Run starting container + Playwright initializing.
+
+**Solution**:
+1. This is expected for serverless - Playwright browser download is large
+2. Keep instance warm with scheduled Cloud Scheduler ping:
+```bash
+# Create Cloud Scheduler job to ping every 5 minutes
+gcloud scheduler jobs create http keep-warm \
+    --schedule="*/5 * * * *" \
+    --uri="https://your-app-url.run.app/health" \
+    --http-method=GET
+```
+3. Or set `--min-instances 1` (costs ~$10/month but eliminates cold starts)
+
+### Issue: Browser Automation Fails with "Target closed"
+
+**Symptom**: Upload starts but fails with Playwright error about closed targets.
+
+**Cause**: Page navigation or timeout issues with Luminate's admin interface.
+
+**Solution**:
+1. Check if Luminate Online UI has changed (inspect page in browser)
+2. Review logs: `gcloud run services logs read luminate-cookbook --limit 100`
+3. Increase timeouts in `browser_manager.py` if Luminate is slow
+4. Test manually with `PLAYWRIGHT_HEADLESS=false` locally to see what's happening
+
+---
+
+## Deprecated Issues (Streamlit - Historical)
+
+### ~~Error: "You do not have access to this app or it does not exist"~~ 
+
+**Status**: No longer applicable - app no longer uses Streamlit Cloud
 
 ---
 

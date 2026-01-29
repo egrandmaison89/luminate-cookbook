@@ -1,8 +1,8 @@
 # Deploy to Google Cloud Run - Quick Guide
 
-## 🚀 Ready to Deploy!
+## 🚀 Production Deployment
 
-Your FastAPI migration is complete and tested locally. Now let's deploy to production to test the 2FA flow.
+Your FastAPI application is production-ready with full 2FA support, face detection, and all four tools tested. This guide will deploy to Google Cloud Run with auto-scaling and proper resource allocation for Playwright.
 
 ## Prerequisites
 
@@ -90,19 +90,40 @@ The deployment uses these settings optimized for browser automation:
 - **Port**: 8000 (FastAPI default)
 - **Concurrency**: Up to 10 instances
 
-## Testing 2FA in Production
+## Testing After Deployment
 
-Once deployed:
+Once deployed, test all four tools:
 
+### 1. Image Uploader (with 2FA)
 1. Navigate to: `https://your-app-url.run.app/upload`
-2. Enter your Luminate credentials
-3. Select an image to upload
-4. Click "Upload All Images"
-5. **If 2FA is required**:
+2. Enter your Luminate credentials and select images
+3. Click "Upload All Images"
+4. **If 2FA is required**:
    - You'll see: "Two-factor authentication required"
    - Browser session stays alive waiting for your code
    - Enter your 6-digit 2FA code
    - Upload continues with the same authenticated session
+5. Verify images appear in your Luminate Image Library
+
+### 2. Email Banner Processor
+1. Navigate to: `https://your-app-url.run.app/banner`
+2. Upload one or more photos
+3. Configure dimensions (default: 600x340 for email banners)
+4. Click "Process Images"
+5. Download ZIP with standard + retina versions
+
+### 3. PageBuilder Decomposer
+1. Navigate to: `https://your-app-url.run.app/pagebuilder`
+2. Enter a PageBuilder URL or name (e.g., `reus_dm_event_2024`)
+3. Click "Analyze Structure" to preview
+4. Click "Decompose & Download" to get ZIP
+
+### 4. Plain Text Email Beautifier
+1. Navigate to: `https://your-app-url.run.app/email-beautifier`
+2. Paste ugly plain text email
+3. Configure options (strip tracking, format CTAs, etc.)
+4. Click "Beautify"
+5. Copy the cleaned, formatted output
 
 ## Troubleshooting
 
@@ -122,13 +143,33 @@ Just run the same deploy command again, or:
 ./deploy-cloud-run.sh YOUR_PROJECT_ID us-central1
 ```
 
-## What's Different from Streamlit?
+## Why FastAPI Instead of Streamlit?
 
-✅ **No threading issues** - Browser sessions persist server-side
-✅ **Proper 2FA handling** - Same browser continues after code entry
-✅ **Better resource control** - Explicit memory/CPU allocation
-✅ **Modern stack** - FastAPI + HTMX for dynamic updates
-✅ **API endpoints** - Can be integrated with other services
+This application was originally built with Streamlit but migrated to FastAPI to solve critical architectural limitations:
+
+### The Threading Problem
+**Streamlit Issue**: `st.session_state` is request-scoped and thread-local. When a page reruns (which Streamlit does frequently), it may execute in a different thread. Playwright browser objects cannot be accessed from a thread different than the one that created them, causing `RuntimeError: cannot switch to a different thread`.
+
+**FastAPI Solution**: Browser sessions are managed as singleton server-side objects in `BrowserSessionManager`. They persist in memory across HTTP requests and are accessed via UUID session IDs. No thread-switching occurs.
+
+### Architecture Comparison
+
+| Aspect | Streamlit | FastAPI (Current) |
+|--------|-----------|-------------------|
+| **Session Persistence** | Request-scoped, thread-local | Server-side singleton, survives requests |
+| **2FA Support** | ❌ Breaks on rerun | ✅ Fully functional |
+| **Threading** | Multi-threaded reruns | Async single-thread with thread pool for sync code |
+| **Resource Control** | Limited on Cloud | Explicit memory/CPU allocation |
+| **API Access** | None | Full REST API + HTMX endpoints |
+| **Deployment** | Streamlit Cloud (limited Playwright support) | Google Cloud Run (full Docker support) |
+| **Scalability** | Single container | Auto-scaling 0→N instances |
+
+### Additional Benefits
+- ✅ **Automatic API documentation** via FastAPI `/docs` endpoint
+- ✅ **Type safety** with Pydantic models
+- ✅ **Better error handling** with proper HTTP status codes
+- ✅ **Flexible frontend** - HTMX for dynamic updates without SPA complexity
+- ✅ **Production-ready** monitoring and health checks
 
 ## Need Help?
 
