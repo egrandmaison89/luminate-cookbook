@@ -29,6 +29,8 @@ from app.models.schemas import (
     PageBuilderRequest,
     PageBuilderResponse,
     SessionState,
+    EmailBeautifierRequest,
+    EmailBeautifierResponse,
 )
 from app.services.browser_manager import browser_manager
 
@@ -102,6 +104,15 @@ async def pagebuilder_page(request: Request):
     return templates.TemplateResponse("pagebuilder.html", {
         "request": request,
         "title": "PageBuilder Decomposer",
+    })
+
+
+@app.get("/email-beautifier", response_class=HTMLResponse)
+async def email_beautifier_page(request: Request):
+    """Email beautifier page."""
+    return templates.TemplateResponse("email_beautifier.html", {
+        "request": request,
+        "title": "Plain Text Email Beautify",
     })
 
 
@@ -461,6 +472,49 @@ async def pagebuilder_analyze(request: PageBuilderRequest):
         return PageBuilderResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Email Beautifier API Routes
+# =============================================================================
+
+@app.post("/api/email-beautifier/process", response_model=EmailBeautifierResponse)
+async def email_beautifier_process(request: EmailBeautifierRequest):
+    """
+    Beautify plain text email.
+    
+    Takes ugly plain text (from HTML email conversion) and returns
+    beautifully formatted plain text with cleaned URLs and styled CTAs.
+    """
+    from app.services.email_beautifier import beautify_email
+    
+    try:
+        if not request.raw_text or not request.raw_text.strip():
+            return EmailBeautifierResponse(
+                success=False,
+                error="No text provided",
+                message="Please enter some text to beautify"
+            )
+        
+        beautified_text, stats = beautify_email(
+            raw_text=request.raw_text,
+            strip_tracking=request.strip_tracking,
+            format_ctas=request.format_ctas,
+            markdown_links=request.markdown_links,
+        )
+        
+        return EmailBeautifierResponse(
+            success=True,
+            beautified_text=beautified_text,
+            stats=stats,
+            message="Email beautified successfully"
+        )
+    except Exception as e:
+        return EmailBeautifierResponse(
+            success=False,
+            error=str(e),
+            message="An error occurred while beautifying the email"
+        )
 
 
 # =============================================================================

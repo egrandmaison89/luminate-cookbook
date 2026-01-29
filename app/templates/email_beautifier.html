@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Plain Text Email Beautify{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-2">✨ Plain Text Email Beautify</h1>
+    <p class="text-gray-600">Transform ugly plain text emails into beautiful, clean, well-formatted text</p>
+</div>
+
+<div class="space-y-6">
+    
+    <!-- Settings Panel -->
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">⚙️ Beautification Settings</h2>
+        
+        <div class="space-y-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="strip-tracking" checked
+                       class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <span class="text-sm text-gray-700">Strip tracking parameters from URLs (utm_*, fbclid, gclid, etc.)</span>
+            </label>
+            
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="format-ctas" checked
+                       class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <span class="text-sm text-gray-700">Format CTAs with arrow styling (>>> CTA: link <<<)</span>
+            </label>
+            
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="markdown-links" checked
+                       class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <span class="text-sm text-gray-700">Convert links to markdown format ([text](url))</span>
+            </label>
+        </div>
+    </div>
+    
+    <!-- Input Section -->
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">📥 Input: Ugly Plain Text</h2>
+        
+        <textarea id="input-text" 
+                  class="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-y"
+                  placeholder="Paste your ugly plain text email here...
+
+Example:
+CLICK HERE
+
+https://example.com/page?utm_source=email&utm_medium=newsletter&fbclid=12345
+
+Check out our website:   https://example.com?utm_campaign=promo
+
+
+Unsubscribe: https://example.com/unsub"></textarea>
+        
+        <div class="mt-3 flex items-center justify-between">
+            <p class="text-sm text-gray-500">
+                <span id="char-count">0</span> characters
+            </p>
+            <button type="button" id="clear-input" 
+                    class="text-sm text-gray-600 hover:text-red-600 transition-colors">
+                Clear Input
+            </button>
+        </div>
+    </div>
+    
+    <!-- Beautify Button -->
+    <div class="flex justify-center">
+        <button type="button" id="beautify-btn"
+                class="bg-blue-600 text-white py-3 px-8 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shadow-sm">
+            <span id="beautify-spinner" class="hidden">
+                <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+            </span>
+            <span id="beautify-text">✨ Beautify Email</span>
+        </button>
+    </div>
+    
+    <!-- Output Section -->
+    <div id="output-section" class="bg-white rounded-xl shadow-sm p-6 hidden">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-800">📤 Output: Beautiful Plain Text</h2>
+            <button type="button" id="copy-output" 
+                    class="text-sm bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                </svg>
+                <span id="copy-text">Copy to Clipboard</span>
+            </button>
+        </div>
+        
+        <textarea id="output-text" readonly
+                  class="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm resize-y"></textarea>
+        
+        <!-- Stats -->
+        <div id="stats-section" class="mt-4 p-4 bg-blue-50 rounded-lg">
+            <h3 class="text-sm font-semibold text-blue-800 mb-2">📊 Changes Made:</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div class="text-blue-700">
+                    <span class="font-medium" id="stat-urls">0</span> URLs cleaned
+                </div>
+                <div class="text-blue-700">
+                    <span class="font-medium" id="stat-ctas">0</span> CTAs formatted
+                </div>
+                <div class="text-blue-700">
+                    <span class="font-medium" id="stat-links">0</span> links converted
+                </div>
+                <div class="text-blue-700">
+                    <span class="font-medium" id="stat-lines">0</span> lines reduced
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Error Section -->
+    <div id="error-section" class="bg-red-50 border border-red-200 rounded-lg p-4 hidden">
+        <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-red-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+            </svg>
+            <div>
+                <h3 class="text-sm font-semibold text-red-800">Error</h3>
+                <p id="error-message" class="text-sm text-red-700 mt-1"></p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Comparison View -->
+    <div id="comparison-section" class="hidden">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">📊 Before & After Comparison</h2>
+        <div class="grid md:grid-cols-2 gap-4">
+            <!-- Before -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h3 class="text-sm font-semibold text-gray-700 mb-2">Before</h3>
+                <div class="bg-white rounded border border-gray-300 p-3 h-48 overflow-auto">
+                    <pre id="comparison-before" class="text-xs text-gray-600 whitespace-pre-wrap font-mono"></pre>
+                </div>
+            </div>
+            <!-- After -->
+            <div class="bg-green-50 rounded-lg p-4">
+                <h3 class="text-sm font-semibold text-green-700 mb-2">After</h3>
+                <div class="bg-white rounded border border-green-300 p-3 h-48 overflow-auto">
+                    <pre id="comparison-after" class="text-xs text-gray-600 whitespace-pre-wrap font-mono"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+</div>
+
+<script>
+// Character counter
+const inputText = document.getElementById('input-text');
+const charCount = document.getElementById('char-count');
+
+inputText.addEventListener('input', () => {
+    charCount.textContent = inputText.value.length;
+});
+
+// Clear input
+document.getElementById('clear-input').addEventListener('click', () => {
+    inputText.value = '';
+    charCount.textContent = '0';
+    document.getElementById('output-section').classList.add('hidden');
+    document.getElementById('error-section').classList.add('hidden');
+    document.getElementById('comparison-section').classList.add('hidden');
+});
+
+// Beautify button
+document.getElementById('beautify-btn').addEventListener('click', async () => {
+    const rawText = inputText.value;
+    
+    if (!rawText.trim()) {
+        showError('Please enter some text to beautify');
+        return;
+    }
+    
+    // Show loading state
+    const btn = document.getElementById('beautify-btn');
+    const spinner = document.getElementById('beautify-spinner');
+    const btnText = document.getElementById('beautify-text');
+    
+    btn.disabled = true;
+    spinner.classList.remove('hidden');
+    btnText.textContent = 'Beautifying...';
+    
+    // Hide previous results
+    document.getElementById('output-section').classList.add('hidden');
+    document.getElementById('error-section').classList.add('hidden');
+    document.getElementById('comparison-section').classList.add('hidden');
+    
+    // Get settings
+    const stripTracking = document.getElementById('strip-tracking').checked;
+    const formatCtas = document.getElementById('format-ctas').checked;
+    const markdownLinks = document.getElementById('markdown-links').checked;
+    
+    try {
+        const response = await fetch('/api/email-beautifier/process', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                raw_text: rawText,
+                strip_tracking: stripTracking,
+                format_ctas: formatCtas,
+                markdown_links: markdownLinks,
+            }),
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showOutput(data.beautified_text, data.stats, rawText);
+        } else {
+            showError(data.error || 'An error occurred');
+        }
+    } catch (error) {
+        showError('Failed to connect to server: ' + error.message);
+    } finally {
+        // Reset button state
+        btn.disabled = false;
+        spinner.classList.add('hidden');
+        btnText.textContent = '✨ Beautify Email';
+    }
+});
+
+function showOutput(beautifiedText, stats, originalText) {
+    // Show output section
+    document.getElementById('output-section').classList.remove('hidden');
+    document.getElementById('output-text').value = beautifiedText;
+    
+    // Update stats
+    document.getElementById('stat-urls').textContent = stats.urls_cleaned || 0;
+    document.getElementById('stat-ctas').textContent = stats.ctas_formatted || 0;
+    document.getElementById('stat-links').textContent = stats.links_converted || 0;
+    
+    const linesReduced = (stats.lines_before || 0) - (stats.lines_after || 0);
+    document.getElementById('stat-lines').textContent = linesReduced;
+    
+    // Show comparison
+    document.getElementById('comparison-section').classList.remove('hidden');
+    document.getElementById('comparison-before').textContent = originalText.substring(0, 500) + (originalText.length > 500 ? '...' : '');
+    document.getElementById('comparison-after').textContent = beautifiedText.substring(0, 500) + (beautifiedText.length > 500 ? '...' : '');
+    
+    // Scroll to output
+    document.getElementById('output-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function showError(message) {
+    document.getElementById('error-section').classList.remove('hidden');
+    document.getElementById('error-message').textContent = message;
+    document.getElementById('error-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Copy to clipboard
+document.getElementById('copy-output').addEventListener('click', async () => {
+    const outputText = document.getElementById('output-text').value;
+    const copyBtn = document.getElementById('copy-output');
+    const copyText = document.getElementById('copy-text');
+    
+    try {
+        await navigator.clipboard.writeText(outputText);
+        
+        // Show success feedback
+        copyText.textContent = 'Copied!';
+        copyBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+        copyBtn.classList.add('bg-green-700');
+        
+        setTimeout(() => {
+            copyText.textContent = 'Copy to Clipboard';
+            copyBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+            copyBtn.classList.remove('bg-green-700');
+        }, 2000);
+    } catch (error) {
+        showError('Failed to copy to clipboard');
+    }
+});
+</script>
+{% endblock %}

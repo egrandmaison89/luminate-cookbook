@@ -135,3 +135,22 @@ class PageBuilderResponse(BaseModel):
     components: List[PageBuilderComponent] = Field(default_factory=list)
     message: str = ""
     error: Optional[str] = None
+
+
+# Email Beautifier Schemas
+
+class EmailBeautifierRequest(BaseModel):
+    """Request to beautify plain text email."""
+    raw_text: str = Field(..., description="Raw plain text email to beautify")
+    strip_tracking: bool = Field(default=True, description="Strip tracking parameters from URLs")
+    format_ctas: bool = Field(default=True, description="Format CTAs with arrow styling")
+    markdown_links: bool = Field(default=True, description="Convert links to markdown format")
+
+
+class EmailBeautifierResponse(BaseModel):
+    """Response after beautifying email text."""
+    success: bool = Field(..., description="Whether beautification succeeded")
+    beautified_text: str = Field(default="", description="The beautified email text")
+    stats: Dict[str, Any] = Field(default_factory=dict, description="Statistics about changes made")
+    message: str = Field(default="", description="Status message")
+    error: Optional[str] = Field(default=None, description="Error message if any")
