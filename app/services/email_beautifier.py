@@ -358,6 +358,84 @@ def detect_preview_text(text: str) -> tuple[str, str]:
     return None, text
 
 
+def join_broken_lines(text: str) -> str:
+    """
+    Join lines that are part of the same paragraph/sentence.
+    
+    Keeps intentional breaks (empty lines, ends of sentences, etc.)
+    but joins lines that were broken mid-sentence due to HTML conversion.
+    """
+    lines = text.split('\n')
+    result_lines = []
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i].rstrip()
+        
+        # If line is empty, keep it and move on
+        if not line.strip():
+            result_lines.append(line)
+            i += 1
+            continue
+        
+        # Check if this line should be joined with the next
+        should_join = False
+        if i + 1 < len(lines):
+            next_line = lines[i + 1].strip()
+            
+            # Don't join if next line is empty
+            if not next_line:
+                result_lines.append(line)
+                i += 1
+                continue
+            
+            # Don't join if next line starts with URL
+            if next_line.startswith('http://') or next_line.startswith('https://'):
+                result_lines.append(line)
+                i += 1
+                continue
+            
+            # Don't join if current line ends with sentence-ending punctuation
+            if line.rstrip().endswith(('.', '!', '?', ':', '>>>')):
+                result_lines.append(line)
+                i += 1
+                continue
+            
+            # Don't join if next line looks like a header or CTA (all caps, short)
+            if next_line.isupper() and len(next_line) < 50:
+                result_lines.append(line)
+                i += 1
+                continue
+            
+            # Don't join if current or next line contains arrows (formatted CTA)
+            if '>>>' in line or '<<<' in line or '>>>' in next_line or '<<<' in next_line:
+                result_lines.append(line)
+                i += 1
+                continue
+            
+            # JOIN if next line starts with lowercase (continuation)
+            if next_line[0].islower():
+                should_join = True
+            # JOIN if line doesn't end with punctuation and next starts with uppercase but continues thought
+            elif not line.rstrip().endswith((',', ';', '-', '&')) and next_line[0].isupper():
+                # This is a judgment call - join if the line seems incomplete
+                # (less than 70 chars suggests it might be broken)
+                if len(line) < 70:
+                    should_join = True
+        
+        if should_join and i + 1 < len(lines):
+            # Join with next line
+            next_line = lines[i + 1].strip()
+            joined = line + ' ' + next_line
+            result_lines.append(joined)
+            i += 2  # Skip next line since we joined it
+        else:
+            result_lines.append(line)
+            i += 1
+    
+    return '\n'.join(result_lines)
+
+
 def normalize_whitespace(text: str) -> str:
     """
     Normalize excessive whitespace and line breaks.
@@ -391,57 +469,173 @@ def normalize_whitespace(text: str) -> str:
     return result
 
 
+def simplify_footer(text: str) -> str:
+    """
+    Simplify and clean up footer section.
+    
+    - Removes logo/image references
+    - Consolidates organization links
+    - Formats unsubscribe/privacy policy inline
+    - Removes social media/badge links
+    """
+    lines = text.split('\n')
+    
+    # First, find where footer likely starts (look for social media or org logos)
+    footer_start_idx = None
+    for i, line in enumerate(lines):
+        line_lower = line.lower().strip()
+        # Footer often starts with logo references or social media before links
+        if ('logo' in line_lower or 
+            line_lower in ['facebook', 'twitter', 'x', 'instagram', 'youtube', 'linkedin'] or
+            'dana-farber' in line_lower and i < len(lines) - 20):  # Logo text usually comes before URLs
+            footer_start_idx = i
+            break
+    
+    # If no clear footer start, try to find it by looking for multiple consecutive URLs
+    if footer_start_idx is None:
+        url_count = 0
+        for i, line in enumerate(lines):
+            if line.strip().startswith('http'):
+                url_count += 1
+                if url_count >= 3 and footer_start_idx is None:
+                    footer_start_idx = i - 2
+                    break
+            else:
+                url_count = 0
+    
+    # If still no footer found, return original
+    if footer_start_idx is None:
+        return text
+    
+    # Process main content (before footer)
+    main_content = lines[:footer_start_idx]
+    footer_content = lines[footer_start_idx:]
+    
+    # Patterns to remove from footer
+    remove_patterns = [
+        r'.*logo.*',
+        r'.*badge.*',
+        r'^facebook$',
+        r'^twitter$',
+        r'^x$',
+        r'^instagram$',
+        r'^youtube$',
+        r'^linkedin$',
+    ]
+    
+    # Extract important URLs from footer
+    org_urls = []
+    unsubscribe_info = None
+    privacy_info = None
+    view_browser_url = None
+    copyright_line = None
+    address_line = None
+    
+    i = 0
+    while i < len(footer_content):
+        line = footer_content[i].strip()
+        line_lower = line.lower()
+        
+        # Skip remove patterns
+        if any(re.match(pattern, line_lower) for pattern in remove_patterns):
+            i += 1
+            continue
+        
+        # Skip social media URLs
+        if re.search(r'(facebook\.com|twitter\.com|instagram\.com|youtube\.com|linkedin\.com)', line_lower):
+            i += 1
+            continue
+        
+        # Skip badge/rating URLs
+        if 'usnews.com' in line_lower or 'charitynavigator.org' in line_lower:
+            i += 1
+            continue
+        
+        # Capture main org URLs
+        if ('dana-farber.org' in line or 'jimmyfund.org' in line) and '/site/' not in line and '/privacy' not in line:
+            org_urls.append(line)
+            i += 1
+            continue
+        
+        # Capture unsubscribe
+        if '/site/CO' in line or ('unsubscribe' in line_lower and line.startswith('http')):
+            unsubscribe_info = f'Unsubscribe ({line})'
+            i += 1
+            # Skip previous "Unsubscribe" label line if exists
+            continue
+        
+        # Capture privacy policy
+        if 'privacy-policy' in line or ('privacy' in line_lower and 'policy' in line_lower and line.startswith('http')):
+            privacy_info = f'Privacy Policy ({line})'
+            i += 1
+            continue
+        
+        # Capture view in browser
+        if 'MessageViewer' in line or ('view' in line_lower and 'browser' in line_lower and line.startswith('http')):
+            view_browser_url = line
+            i += 1
+            continue
+        
+        # Capture copyright
+        if line.startswith('©'):
+            copyright_line = line
+            i += 1
+            continue
+        
+        # Capture address (usually has numbers and "MA" or similar)
+        if re.search(r'\d{5}(-\d{4})?', line):  # ZIP code pattern
+            address_line = line
+            i += 1
+            continue
+        
+        i += 1
+    
+    # Rebuild footer in simplified format
+    simplified_footer = []
+    
+    # Add separator
+    simplified_footer.append('')
+    simplified_footer.append('═' * 70)
+    simplified_footer.append('')
+    
+    # Add org URLs on one line
+    if org_urls:
+        simplified_footer.append(' | '.join(org_urls))
+        simplified_footer.append('')
+    
+    # Add unsubscribe
+    if unsubscribe_info:
+        simplified_footer.append(unsubscribe_info)
+        simplified_footer.append('')
+    
+    # Add privacy policy
+    if privacy_info:
+        simplified_footer.append(privacy_info)
+        simplified_footer.append('')
+    
+    # Add copyright
+    if copyright_line:
+        simplified_footer.append(copyright_line)
+        simplified_footer.append('')
+    
+    # Add address
+    if address_line:
+        simplified_footer.append(address_line)
+    
+    # Combine main content with simplified footer
+    result = main_content + simplified_footer
+    
+    return '\n'.join(result)
+
+
 def clean_footer_section(text: str) -> str:
     """
     Clean up footer sections (unsubscribe links, addresses, etc.).
     
     Adds visual separator before footer if detected.
     """
-    # Common footer indicators (more comprehensive)
-    footer_indicators = [
-        'unsubscribe', 'opt out', 'manage preferences', 'manage subscription',
-        'update your email preferences', 'you received this email',
-        'you are receiving this', 'view in browser', 'view online',
-        'privacy policy', 'terms of service', 'copyright', '©',
-        'best hospital', 'charity navigator', 'division of philanthropy',
-    ]
-    
-    # Social media indicators (often mark start of footer)
-    social_indicators = ['facebook', 'twitter', 'instagram', 'youtube', 'linkedin']
-    
-    # Find first footer indicator
-    lines = text.split('\n')
-    footer_start = None
-    
-    # First pass: look for social media section (often precedes footer)
-    social_count = 0
-    social_start = None
-    for i, line in enumerate(lines):
-        line_lower = line.lower().strip()
-        if any(social in line_lower for social in social_indicators):
-            social_count += 1
-            if social_start is None:
-                social_start = i
-            # If we see multiple social media links close together, that's likely the footer start
-            if social_count >= 2 and i - social_start < 20:
-                footer_start = social_start
-                break
-    
-    # Second pass: look for explicit footer indicators
-    if footer_start is None:
-        for i, line in enumerate(lines):
-            line_lower = line.lower()
-            if any(indicator in line_lower for indicator in footer_indicators):
-                footer_start = i
-                break
-    
-    # If footer found, add separator
-    if footer_start is not None and footer_start > 5:  # Only add if there's substantial content before
-        # Insert separator line
-        lines.insert(footer_start, '')
-        lines.insert(footer_start, '═' * 70)
-        lines.insert(footer_start, '')
-        text = '\n'.join(lines)
+    # Apply footer simplification
+    text = simplify_footer(text)
     
     return text
 
@@ -483,6 +677,9 @@ def beautify_email(
     preview_text, text = detect_preview_text(text)
     if preview_text:
         stats['preview_text_found'] = True
+    
+    # Join broken lines (fix mid-sentence breaks)
+    text = join_broken_lines(text)
     
     # Start with normalized whitespace
     text = normalize_whitespace(text)
