@@ -81,7 +81,10 @@ Unsubscribe: https://example.com/unsub"></textarea>
     <!-- Output Section -->
     <div id="output-section" class="bg-white rounded-xl shadow-sm p-6 hidden">
         <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold text-gray-800">📤 Output: Beautiful Plain Text</h2>
+            <div>
+                <h2 class="text-lg font-semibold text-gray-800">📤 Output: Beautiful Plain Text</h2>
+                <p class="text-xs text-gray-500 mt-1">✏️ Editable - make any manual tweaks you need</p>
+            </div>
             <button type="button" id="copy-output" 
                     class="text-sm bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -91,8 +94,9 @@ Unsubscribe: https://example.com/unsub"></textarea>
             </button>
         </div>
         
-        <textarea id="output-text" readonly
-                  class="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm resize-y"></textarea>
+        <textarea id="output-text"
+                  class="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg bg-white font-mono text-sm resize-y focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Your beautified email will appear here..."></textarea>
         
         <!-- Stats -->
         <div id="stats-section" class="mt-4 p-4 bg-blue-50 rounded-lg">
