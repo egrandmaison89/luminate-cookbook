@@ -16,7 +16,7 @@ TRACKING_PARAMS = {
     'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
     'utm_id', 'utm_source_platform', 'utm_creative_format', 'utm_marketing_tactic',
     'fbclid', 'gclid', 'msclkid', '_ga', 'mc_cid', 'mc_eid',
-    'mkt_tok', 'trk', 'trkid', 'icid', 'igshid', 'zanpid',
+    'mkt_tok', 'trk', 'trkid', 'icid', 'igshid', 'zanpid', 's_src',
 }
 
 # Common CTA phrases (case-insensitive)
@@ -222,6 +222,142 @@ def convert_links_to_markdown(text: str, ctas: List[Tuple[str, str, int, int]]) 
     return result
 
 
+def strip_css_blocks(text: str) -> str:
+    """
+    Remove CSS blocks from text.
+    
+    Handles:
+    - <style> tags
+    - CSS rules (selector { properties })
+    - @media queries
+    - Email tracking CSS
+    """
+    # Remove everything up to and including closing style tag
+    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    
+    lines = text.split('\n')
+    
+    # Remove CSS blocks at the START
+    # Find first line that's definitely NOT CSS
+    content_start = 0
+    brace_count = 0
+    
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        
+        # Update brace count
+        brace_count += stripped.count('{') - stripped.count('}')
+        
+        # Skip empty lines
+        if not stripped:
+            continue
+        
+        # CSS patterns to match
+        css_patterns = [
+            r'^body\s*{',  # body {
+            r'^@media',  # @media queries
+            r'^#[\w-]+\s*{',  # #id {
+            r'^\.[\w-]+\s*{',  # .class {
+            r'^\*\s*{',  # * {
+            r'^/\*',  # /* comment
+            r'^\*/',  # */ comment end
+            r'^\}',  # closing brace
+            r'^[\w-]+:\s*[^{]+;',  # CSS property: value;
+            r'!important',  # !important keyword
+        ]
+        
+        # Check if line matches any CSS pattern OR we're inside braces
+        is_css = any(re.search(pattern, stripped) for pattern in css_patterns) or brace_count > 0
+        
+        # If NOT CSS and braces are balanced, we found content
+        if not is_css and brace_count == 0:
+            content_start = i
+            break
+    
+    # Apply the cut
+    if content_start > 0:
+        lines = lines[content_start:]
+    
+    # Remove CSS blocks at the END (work with the already-trimmed lines)
+    # Work backwards to find last line of CSS
+    content_end = len(lines)
+    brace_count = 0
+    
+    for i in range(len(lines) - 1, -1, -1):
+        stripped = lines[i].strip()
+        
+        # Update brace count (reversed)
+        brace_count += stripped.count('}') - stripped.count('{')
+        
+        # Skip empty lines
+        if not stripped:
+            continue
+        
+        # End CSS patterns
+        end_css_patterns = [
+            r'@media',
+            r'prefers-color-scheme',
+            r'display:\s*none',
+            r'background-image:\s*url',
+            r'content:\s*url',
+            r'^#[\w_]+\s*{',  # #_eoa_img {
+            r'^\.[\w_]+',  # .class
+            r'^div\.',  # div.class
+            r'^table\.',  # table.class
+            r'^blockquote',  # blockquote
+            r'^\}',  # closing brace
+        ]
+        
+        # Check if line matches end CSS patterns OR we're inside braces
+        is_end_css = any(re.search(pattern, stripped, re.IGNORECASE) for pattern in end_css_patterns) or brace_count > 0
+        
+        # If NOT CSS and braces are balanced, we found last content
+        if not is_end_css and brace_count == 0:
+            content_end = i + 1
+            break
+    
+    # Apply the cut
+    if content_end < len(lines):
+        lines = lines[:content_end]
+    
+    return '\n'.join(lines)
+
+
+def detect_preview_text(text: str) -> tuple[str, str]:
+    """
+    Detect and extract preview/callout text at the beginning.
+    
+    Preview text is usually the first line of actual content (non-URL)
+    that appears before the main body.
+    
+    Returns:
+        Tuple of (preview_text, remaining_text)
+    """
+    lines = text.strip().split('\n')
+    preview_text = None
+    content_start = 0
+    
+    # Look for the first substantial line of text (not a URL, not too short)
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        
+        # Skip empty lines and URLs
+        if not stripped or re.match(r'^https?://', stripped):
+            continue
+        
+        # If it's a short, impactful line (typical preview text), mark it
+        if len(stripped) < 100 and not stripped.startswith('Dear') and not stripped.startswith('Hi'):
+            preview_text = stripped
+            content_start = i + 1
+            break
+    
+    if preview_text:
+        remaining = '\n'.join(lines[content_start:])
+        return preview_text, remaining
+    
+    return None, text
+
+
 def normalize_whitespace(text: str) -> str:
     """
     Normalize excessive whitespace and line breaks.
@@ -261,29 +397,49 @@ def clean_footer_section(text: str) -> str:
     
     Adds visual separator before footer if detected.
     """
-    # Common footer indicators
+    # Common footer indicators (more comprehensive)
     footer_indicators = [
         'unsubscribe', 'opt out', 'manage preferences', 'manage subscription',
         'update your email preferences', 'you received this email',
         'you are receiving this', 'view in browser', 'view online',
-        'privacy policy', 'terms of service', 'copyright',
+        'privacy policy', 'terms of service', 'copyright', '©',
+        'best hospital', 'charity navigator', 'division of philanthropy',
     ]
+    
+    # Social media indicators (often mark start of footer)
+    social_indicators = ['facebook', 'twitter', 'instagram', 'youtube', 'linkedin']
     
     # Find first footer indicator
     lines = text.split('\n')
     footer_start = None
     
+    # First pass: look for social media section (often precedes footer)
+    social_count = 0
+    social_start = None
     for i, line in enumerate(lines):
-        line_lower = line.lower()
-        if any(indicator in line_lower for indicator in footer_indicators):
-            footer_start = i
-            break
+        line_lower = line.lower().strip()
+        if any(social in line_lower for social in social_indicators):
+            social_count += 1
+            if social_start is None:
+                social_start = i
+            # If we see multiple social media links close together, that's likely the footer start
+            if social_count >= 2 and i - social_start < 20:
+                footer_start = social_start
+                break
+    
+    # Second pass: look for explicit footer indicators
+    if footer_start is None:
+        for i, line in enumerate(lines):
+            line_lower = line.lower()
+            if any(indicator in line_lower for indicator in footer_indicators):
+                footer_start = i
+                break
     
     # If footer found, add separator
-    if footer_start is not None and footer_start > 0:
+    if footer_start is not None and footer_start > 5:  # Only add if there's substantial content before
         # Insert separator line
         lines.insert(footer_start, '')
-        lines.insert(footer_start, '─' * 50)
+        lines.insert(footer_start, '═' * 70)
         lines.insert(footer_start, '')
         text = '\n'.join(lines)
     
@@ -314,10 +470,22 @@ def beautify_email(
         'links_converted': 0,
         'lines_before': len(raw_text.split('\n')),
         'lines_after': 0,
+        'css_stripped': False,
+        'preview_text_found': False,
     }
     
+    # Strip CSS blocks first
+    text = strip_css_blocks(raw_text)
+    if len(text) < len(raw_text) * 0.9:  # If we removed more than 10%, we likely found CSS
+        stats['css_stripped'] = True
+    
+    # Detect and extract preview text
+    preview_text, text = detect_preview_text(text)
+    if preview_text:
+        stats['preview_text_found'] = True
+    
     # Start with normalized whitespace
-    text = normalize_whitespace(raw_text)
+    text = normalize_whitespace(text)
     
     # Detect CTAs first
     ctas = []
@@ -360,6 +528,11 @@ def beautify_email(
     
     # Final whitespace normalization
     text = normalize_whitespace(text)
+    
+    # Add preview text at the top if found
+    if preview_text:
+        preview_section = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n{preview_text}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        text = preview_section + text
     
     stats['lines_after'] = len(text.split('\n'))
     
