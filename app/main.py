@@ -109,6 +109,80 @@ async def pagebuilder_page(request: Request):
 # Upload API Routes
 # =============================================================================
 
+@app.post("/upload/start", response_class=HTMLResponse)
+async def upload_start_html(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    files: List[UploadFile] = File(...),
+):
+    """
+    Start upload session and return HTML partial for HTMX.
+    This is the endpoint the form actually hits.
+    """
+    # Validate files
+    if not files:
+        return templates.TemplateResponse("partials/upload_error.html", {
+            "request": request,
+            "error": "No files provided",
+        })
+    
+    # Validate file sizes and types
+    temp_dir = tempfile.mkdtemp()
+    saved_files = []
+    
+    try:
+        for file in files:
+            # Check extension
+            ext = file.filename.split(".")[-1].lower() if "." in file.filename else ""
+            if ext not in settings.allowed_extensions:
+                return templates.TemplateResponse("partials/upload_error.html", {
+                    "request": request,
+                    "error": f"Invalid file type: {file.filename}. Allowed: {', '.join(settings.allowed_extensions)}",
+                })
+            
+            # Save to temp directory
+            file_path = os.path.join(temp_dir, file.filename)
+            content = await file.read()
+            
+            # Check size
+            size_mb = len(content) / (1024 * 1024)
+            if size_mb > settings.max_upload_size_mb:
+                return templates.TemplateResponse("partials/upload_error.html", {
+                    "request": request,
+                    "error": f"File too large: {file.filename} ({size_mb:.1f}MB). Max: {settings.max_upload_size_mb}MB",
+                })
+            
+            with open(file_path, "wb") as f:
+                f.write(content)
+            saved_files.append(file_path)
+        
+        # Create browser session and start login
+        session_id, state, needs_2fa, message, error = await browser_manager.create_session(
+            username=username,
+            password=password,
+            files=saved_files,
+            temp_dir=temp_dir,
+        )
+        
+        # Get full status to render template
+        status = await browser_manager.get_session_status(session_id)
+        
+        # Return HTML partial
+        return templates.TemplateResponse("partials/upload_status.html", {
+            "request": request,
+            **status,
+        })
+        
+    except Exception as e:
+        # Clean up on unexpected error
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        return templates.TemplateResponse("partials/upload_error.html", {
+            "request": request,
+            "error": str(e),
+        })
+
+
 @app.post("/api/upload/start", response_model=UploadStartResponse)
 async def upload_start(
     username: str = Form(...),
@@ -179,6 +253,36 @@ async def upload_start(
         # Clean up on unexpected error
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/upload/2fa/{session_id}", response_class=HTMLResponse)
+async def upload_2fa_html(
+    request: Request,
+    session_id: str,
+    code: str = Form(...),
+):
+    """
+    Submit 2FA code and return HTML partial for HTMX.
+    """
+    success, state, message, error = await browser_manager.submit_2fa(
+        session_id=session_id,
+        code=code,
+    )
+    
+    # Get full status to render template
+    status = await browser_manager.get_session_status(session_id)
+    
+    if status is None:
+        return templates.TemplateResponse("partials/upload_error.html", {
+            "request": request,
+            "error": "Session not found or expired",
+        })
+    
+    # Return HTML partial with updated status
+    return templates.TemplateResponse("partials/upload_status.html", {
+        "request": request,
+        **status,
+    })
 
 
 @app.post("/api/upload/2fa/{session_id}", response_model=TwoFactorResponse)

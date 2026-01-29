@@ -25,7 +25,7 @@
                 </div>
                 {% endif %}
                 
-                <form hx-post="/api/upload/2fa/{{ session_id }}"
+                <form hx-post="/upload/2fa/{{ session_id }}"
                       hx-target="#upload-status"
                       hx-swap="innerHTML"
                       class="flex gap-3">
