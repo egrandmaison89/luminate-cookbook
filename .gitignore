@@ -30,6 +30,9 @@ resized/
 *.tmp
 *.log
 
+# MediaPipe models (auto-downloaded)
+.mediapipe_models/
+
 
 # Cursor IDE configuration (personal settings - never commit)
 .cursor/

@@ -82,6 +82,8 @@ class BannerSettings(BaseModel):
     quality: int = Field(default=82, ge=1, le=100, description="JPEG quality")
     include_retina: bool = Field(default=True, description="Include 2x retina version")
     filename_prefix: str = Field(default="", description="Prefix for output filenames")
+    crop_padding: float = Field(default=0.15, ge=0.0, le=0.3, description="Padding around detected subjects (0.0-0.3)")
+    detection_mode: str = Field(default="auto", description="Detection mode: auto, face_only, manual")
 
 
 class BannerProcessRequest(BaseModel):
@@ -97,6 +99,7 @@ class BannerResult(BaseModel):
     height: int
     size_kb: float
     faces_detected: int
+    people_detected: int = Field(default=0, description="Number of people detected")
 
 
 class BannerProcessResponse(BaseModel):
@@ -106,6 +109,44 @@ class BannerProcessResponse(BaseModel):
     total_files: int = 0
     message: str = ""
     error: Optional[str] = None
+
+
+class CropBox(BaseModel):
+    """Crop box coordinates."""
+    x1: int = Field(..., description="Left coordinate")
+    y1: int = Field(..., description="Top coordinate")
+    x2: int = Field(..., description="Right coordinate")
+    y2: int = Field(..., description="Bottom coordinate")
+    width: int = Field(..., description="Crop width")
+    height: int = Field(..., description="Crop height")
+
+
+class ImageDimensions(BaseModel):
+    """Image dimensions."""
+    width: int
+    height: int
+
+
+class BannerPreviewResponse(BaseModel):
+    """Response for banner crop preview."""
+    success: bool = Field(..., description="Whether preview generation succeeded")
+    image_base64: str = Field(default="", description="Base64 encoded image with data URI")
+    crop_box: Optional[CropBox] = Field(default=None, description="Suggested crop coordinates")
+    people_detected: int = Field(default=0, description="Number of people detected")
+    faces_detected: int = Field(default=0, description="Number of faces detected")
+    dimensions: Optional[ImageDimensions] = Field(default=None, description="Original image dimensions")
+    target_dimensions: Optional[ImageDimensions] = Field(default=None, description="Target output dimensions")
+    message: str = Field(default="", description="Status message")
+    error: Optional[str] = Field(default=None, description="Error message if any")
+
+
+class ManualCrop(BaseModel):
+    """Manual crop coordinates for a file."""
+    filename: str = Field(..., description="Filename to apply crop to")
+    x1: int = Field(..., ge=0, description="Left coordinate")
+    y1: int = Field(..., ge=0, description="Top coordinate")
+    x2: int = Field(..., gt=0, description="Right coordinate")
+    y2: int = Field(..., gt=0, description="Bottom coordinate")
 
 
 # PageBuilder Decomposer Schemas

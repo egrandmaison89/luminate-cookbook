@@ -26,6 +26,8 @@ from app.models.schemas import (
     UploadResult,
     BannerProcessResponse,
     BannerSettings,
+    BannerPreviewResponse,
+    ManualCrop,
     PageBuilderRequest,
     PageBuilderResponse,
     SessionState,
@@ -369,6 +371,47 @@ async def upload_status_partial(request: Request, session_id: str):
 # Banner Processor API Routes
 # =============================================================================
 
+@app.post("/api/banner/preview")
+async def banner_preview(
+    file: UploadFile = File(...),
+    width: int = Form(600),
+    height: int = Form(340),
+    quality: int = Form(82),
+    crop_padding: float = Form(0.15),
+):
+    """
+    Generate a crop preview for a single image.
+    Returns the image with suggested crop coordinates.
+    """
+    from app.services.banner_processor import generate_crop_preview
+    
+    if not file:
+        raise HTTPException(status_code=400, detail="No file provided")
+    
+    settings_obj = BannerSettings(
+        width=width,
+        height=height,
+        quality=quality,
+        crop_padding=crop_padding,
+    )
+    
+    try:
+        content = await file.read()
+        preview_data = generate_crop_preview(content, settings_obj)
+        
+        return BannerPreviewResponse(
+            success=True,
+            **preview_data,
+            message="Preview generated successfully"
+        )
+    except Exception as e:
+        return BannerPreviewResponse(
+            success=False,
+            error=str(e),
+            message="Failed to generate preview"
+        )
+
+
 @app.post("/api/banner/process")
 async def banner_process(
     files: List[UploadFile] = File(...),
@@ -377,12 +420,19 @@ async def banner_process(
     quality: int = Form(82),
     include_retina: bool = Form(True),
     filename_prefix: str = Form(""),
+    crop_padding: float = Form(0.15),
+    manual_crops: Optional[str] = Form(None),
 ):
     """
     Process uploaded images into email banners.
     Returns a ZIP file with processed images.
+    
+    Args:
+        manual_crops: Optional JSON string mapping filename to crop coords
+                     e.g., '{"image.jpg": {"x1": 0, "y1": 100, "x2": 600, "y2": 440}}'
     """
     from app.services.banner_processor import process_banners
+    import json
     
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
@@ -393,7 +443,16 @@ async def banner_process(
         quality=quality,
         include_retina=include_retina,
         filename_prefix=filename_prefix,
+        crop_padding=crop_padding,
     )
+    
+    # Parse manual crops if provided
+    manual_crops_dict = None
+    if manual_crops:
+        try:
+            manual_crops_dict = json.loads(manual_crops)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid manual_crops JSON")
     
     # Read file contents
     file_data = []
@@ -403,7 +462,7 @@ async def banner_process(
     
     # Process banners
     try:
-        zip_bytes, results = await process_banners(file_data, settings_obj)
+        zip_bytes, results = await process_banners(file_data, settings_obj, manual_crops_dict)
         
         # Return ZIP file
         zip_filename = f"{filename_prefix}_email_banners.zip" if filename_prefix else "email_banners.zip"

@@ -8,7 +8,7 @@
     <p class="text-gray-600">Transform photos into perfectly-sized email banners with intelligent face detection</p>
 </div>
 
-<form id="banner-form" action="/api/banner/process" method="post" enctype="multipart/form-data" class="space-y-6">
+<form id="banner-form" class="space-y-6">
     
     <!-- Settings -->
     <div class="bg-white rounded-xl shadow-sm p-6">
@@ -42,12 +42,21 @@
             </div>
         </div>
         
-        <div class="mt-4">
-            <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" name="include_retina" value="true" checked
-                       class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
-                <span class="text-sm text-gray-700">Include 2x Retina versions</span>
-            </label>
+        <div class="mt-4 grid md:grid-cols-2 gap-4">
+            <div>
+                <label for="crop_padding" class="block text-sm font-medium text-gray-700 mb-1">Crop Padding</label>
+                <input type="range" id="crop_padding" name="crop_padding" value="0.15" min="0" max="0.3" step="0.05"
+                       class="w-full" oninput="updatePaddingDisplay(this.value)">
+                <p class="text-xs text-gray-500 mt-1">Space around detected people: <span id="padding-display">15%</span></p>
+            </div>
+            
+            <div>
+                <label class="flex items-center gap-2 cursor-pointer mt-6">
+                    <input type="checkbox" name="include_retina" id="include_retina" value="true" checked
+                           class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <span class="text-sm text-gray-700">Include 2x Retina versions</span>
+                </label>
+            </div>
         </div>
         
         <!-- Preview -->
@@ -64,16 +73,16 @@
         <h2 class="text-lg font-semibold text-gray-800 mb-4">📤 Upload Images</h2>
         
         <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
-            <input type="file" id="files" name="files" multiple accept=".jpg,.jpeg,.png" required
+            <input type="file" id="files" name="files" multiple accept=".jpg,.jpeg,.png,.webp" required
                    class="hidden"
-                   onchange="updateBannerFileList(this)">
+                   onchange="handleBannerFileSelect(this)">
             <label for="files" class="cursor-pointer">
                 <div class="text-4xl mb-2">📁</div>
                 <p class="text-gray-600">
                     <span class="text-blue-600 font-medium">Click to select images</span>
                     or drag and drop
                 </p>
-                <p class="text-sm text-gray-500 mt-1">JPG, PNG supported</p>
+                <p class="text-sm text-gray-500 mt-1">JPG, PNG, WebP supported</p>
             </label>
         </div>
         
@@ -83,29 +92,91 @@
         </div>
     </div>
     
-    <!-- Submit Button -->
-    <button type="submit" id="process-btn"
-            class="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
-        <span id="process-spinner" class="hidden">
-            <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
-        </span>
-        <span id="process-text">🚀 Process All Images</span>
-    </button>
+    <!-- Action Buttons -->
+    <div class="flex gap-4">
+        <button type="button" id="preview-btn" onclick="previewAllCrops()"
+                class="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled>
+            <span id="preview-spinner" class="hidden">
+                <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+            </span>
+            <span id="preview-text">👁️ Preview & Adjust Crops</span>
+        </button>
+        
+        <button type="button" id="process-btn" onclick="processAllBanners()"
+                class="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled>
+            <span id="process-spinner" class="hidden">
+                <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+            </span>
+            <span id="process-text">🚀 Process All Images</span>
+        </button>
+    </div>
+    
+    <p class="text-sm text-gray-500 text-center">
+        Tip: Use "Preview & Adjust" to review automatic crops, or "Process All" to use automatic detection
+    </p>
 </form>
+
+<!-- Crop Preview Modal -->
+<div id="crop-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between p-6 border-b">
+            <div>
+                <h3 class="text-xl font-bold text-gray-800">Adjust Crop</h3>
+                <p class="text-sm text-gray-600 mt-1">
+                    <span id="modal-filename"></span>
+                    <span id="modal-detection-info" class="ml-2 text-blue-600"></span>
+                </p>
+            </div>
+            <button onclick="closeCropModal()" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- Modal Body -->
+        <div class="flex-1 overflow-auto p-6">
+            <div class="max-w-full">
+                <img id="crop-image" src="" alt="Crop preview" class="max-w-full">
+            </div>
+        </div>
+        
+        <!-- Modal Footer -->
+        <div class="flex items-center justify-between p-6 border-t bg-gray-50">
+            <div class="text-sm text-gray-600">
+                <span id="modal-progress"></span>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="skipCurrentImage()" class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Skip
+                </button>
+                <button onclick="acceptCurrentCrop()" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                    Accept Crop →
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
 // Update output preview when settings change
-document.querySelectorAll('#width, #height, input[name="include_retina"]').forEach(el => {
-    el.addEventListener('change', updatePreview);
+document.querySelectorAll('#width, #height, #include_retina').forEach(el => {
+    el.addEventListener('change', updateOutputPreview);
 });
 
-function updatePreview() {
+function updateOutputPreview() {
     const width = parseInt(document.getElementById('width').value) || 600;
     const height = parseInt(document.getElementById('height').value) || 340;
-    const retina = document.querySelector('input[name="include_retina"]').checked;
+    const retina = document.getElementById('include_retina').checked;
     
     let preview = `Standard: ${width}×${height}px`;
     if (retina) {
@@ -115,35 +186,9 @@ function updatePreview() {
     document.getElementById('output-preview').textContent = preview;
 }
 
-function updateBannerFileList(input) {
-    const fileList = document.getElementById('file-list');
-    const fileListItems = document.getElementById('file-list-items');
-    
-    if (input.files.length > 0) {
-        fileList.classList.remove('hidden');
-        fileListItems.innerHTML = '';
-        
-        for (let i = 0; i < input.files.length; i++) {
-            const file = input.files[i];
-            const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-            const li = document.createElement('li');
-            li.innerHTML = `<span class="text-gray-800">${file.name}</span> <span class="text-gray-500">(${sizeMB} MB)</span>`;
-            fileListItems.appendChild(li);
-        }
-    } else {
-        fileList.classList.add('hidden');
-    }
+function updatePaddingDisplay(value) {
+    const percent = Math.round(parseFloat(value) * 100);
+    document.getElementById('padding-display').textContent = `${percent}%`;
 }
-
-// Handle form submission
-document.getElementById('banner-form').addEventListener('submit', function(e) {
-    const btn = document.getElementById('process-btn');
-    const spinner = document.getElementById('process-spinner');
-    const text = document.getElementById('process-text');
-    
-    btn.disabled = true;
-    spinner.classList.remove('hidden');
-    text.textContent = 'Processing...';
-});
 </script>
 {% endblock %}

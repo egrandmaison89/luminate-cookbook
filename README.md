@@ -16,15 +16,19 @@ Upload images to your Luminate Online Image Library with **full 2FA support**. S
 - ✅ Human-like interaction patterns to avoid bot detection
 
 ### 🎨 Email Banner Processor
-Transform photos into perfectly-sized email banners with **intelligent face detection** using OpenCV.
+Transform photos into perfectly-sized email banners with **intelligent person detection** and **interactive crop preview**.
 
-**Design Decision**: Face-aware cropping ensures professional results without manual intervention, critical for high-volume campaigns.
+**Design Decision**: MediaPipe full-body detection ensures both people and gestures are captured. Interactive preview gives users control over automatic suggestions.
 
-- ✅ OpenCV-powered face detection (Haar Cascade)
-- ✅ Smart crop region calculation to preserve faces
+- ✅ MediaPipe Pose detection for full-body awareness (with OpenCV face detection fallback)
+- ✅ Smart crop algorithm with configurable padding (0-30%)
+- ✅ Interactive crop preview with Cropper.js for manual adjustments
+- ✅ Two-workflow support: preview-adjust or auto-process
 - ✅ Customizable dimensions and quality
 - ✅ Retina-ready 2x versions for high-DPI displays
 - ✅ ZIP download with all processed variants
+
+> See [Banner Processor User Guide](docs/BANNER_PROCESSOR_USER_GUIDE.md) for detailed usage instructions.
 
 ### 🔍 PageBuilder Decomposer
 Extract and analyze nested PageBuilder components from any Luminate Online page with full hierarchy visualization.
@@ -129,15 +133,18 @@ All endpoints return JSON except where noted. Interactive documentation availabl
 
 | Endpoint | Method | Description | Returns |
 |----------|--------|-------------|---------|
-| `/api/banner/process` | POST | Process images with face detection | ZIP file (application/zip) |
+| `/api/banner/preview` | POST | Generate crop preview for single image | JSON with base64 image and crop coordinates |
+| `/api/banner/process` | POST | Process images with person detection | ZIP file (application/zip) |
 
 **Form Parameters**:
 - `files`: List of image files (multipart/form-data)
 - `width`: Target width in pixels (default: 600)
 - `height`: Target height in pixels (default: 340)
 - `quality`: JPEG quality 1-100 (default: 82)
+- `crop_padding`: Padding around detected people 0.0-0.3 (default: 0.15)
 - `include_retina`: Generate 2x version (default: true)
 - `filename_prefix`: Optional prefix for output filenames
+- `manual_crops`: Optional JSON string with manual crop coordinates per file
 
 ### PageBuilder Decomposer API
 
@@ -309,6 +316,7 @@ luminate-cookbook/
 **Key Files Explained**:
 
 - **browser_manager.py**: The heart of the 2FA solution. Manages persistent Playwright browser sessions with lifecycle management, cleanup, and thread-safe operations.
+- **banner_processor.py**: Image processing with MediaPipe pose detection for full-body awareness, OpenCV face detection fallback, and smart crop algorithms.
 - **email_beautifier.py**: Sophisticated text processing with regex pattern matching, URL cleaning, CTA detection, and footer simplification.
 - **main.py**: FastAPI application with both JSON API endpoints and HTMX HTML partial endpoints for dynamic UI updates.
 - **Dockerfile**: Multi-stage build that installs all Playwright system dependencies (Chromium requires ~30 system packages).
@@ -477,6 +485,18 @@ Environment variables (loaded via Pydantic Settings):
 ## License
 
 MIT
+
+## Documentation
+
+- **[User Guides](docs/)** - End-user instructions for each tool
+  - [Banner Processor User Guide](docs/BANNER_PROCESSOR_USER_GUIDE.md)
+- **[Technical Docs](docs/)** - Implementation details
+  - [Architecture](docs/ARCHITECTURE.md)
+  - [Banner Processor Technical](docs/BANNER_PROCESSOR_TECHNICAL.md)
+  - [Deployment Guide](docs/DEPLOYMENT.md)
+  - [Google Cloud Run Setup](docs/GOOGLE_CLOUD_RUN.md)
+  - [Troubleshooting](docs/TROUBLESHOOTING.md)
+- **[Changelog](CHANGELOG.md)** - Version history and updates
 
 ## Contributing
 
