@@ -4,7 +4,10 @@
 
 {% block content %}
 <div class="text-center mb-12">
-    <h1 class="text-4xl font-bold text-gray-800 mb-4">📚 Luminate Cookbook</h1>
+    <h1 class="text-4xl font-bold text-gray-800 mb-4 flex items-center justify-center gap-3">
+        <img src="/static/images/chef-logo.png" alt="Luminate Cookbook" class="w-12 h-12 rounded-full shadow-sm">
+        <span>Luminate Cookbook</span>
+    </h1>
     <p class="text-xl text-gray-600">A collection of tools to help you work with Luminate Online</p>
 </div>
 
@@ -81,10 +84,10 @@
 <div class="mt-12 p-6 bg-blue-50 rounded-xl">
     <h3 class="text-lg font-semibold text-blue-800 mb-2">🚀 Quick Start</h3>
     <ol class="list-decimal list-inside text-blue-700 space-y-2">
-        <li>Click on any tool above to get started</li>
         <li><strong>Image Uploader</strong>: Enter credentials, select images, upload to Luminate</li>
         <li><strong>Banner Processor</strong>: Upload images, adjust settings, download optimized banners</li>
         <li><strong>PageBuilder Decomposer</strong>: Enter URL or name, download all nested PageBuilders</li>
+        <li><strong>Email Beautifier</strong>: Paste plain text email, beautify and format for better readability</li>
     </ol>
 </div>
 {% endblock %}

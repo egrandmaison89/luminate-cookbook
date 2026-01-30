@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ title }}{% endblock %} - Luminate Cookbook</title>
     
+    <!-- Favicons -->
+    <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/images/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/images/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/images/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/images/favicon-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/static/images/favicon-512x512.png">
+    
     <!-- HTMX for dynamic updates -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     
@@ -43,13 +51,14 @@
     
     {% block head %}{% endblock %}
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="bg-gray-50 min-h-screen flex flex-col">
     <!-- Navigation -->
     <nav class="bg-white shadow-sm border-b">
         <div class="max-w-6xl mx-auto px-4 py-3">
             <div class="flex items-center justify-between">
-                <a href="/" class="text-xl font-bold text-blue-600 hover:text-blue-700 flex items-center gap-2">
-                    <span>📚</span> Luminate Cookbook
+                <a href="/" class="text-xl font-bold text-blue-600 hover:text-blue-700 flex items-center gap-3">
+                    <img src="/static/images/chef-logo.png" alt="Luminate Cookbook" class="w-10 h-10 rounded-full shadow-sm">
+                    <span>Luminate Cookbook</span>
                 </a>
                 <div class="flex gap-4">
                     <a href="/upload" class="text-gray-600 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium {% if request.url.path == '/upload' %}text-blue-600 bg-blue-50{% endif %}">
@@ -70,14 +79,41 @@
     </nav>
     
     <!-- Main content -->
-    <main class="max-w-4xl mx-auto px-4 py-8">
+    <main class="max-w-4xl mx-auto px-4 py-8 flex-grow">
         {% block content %}{% endblock %}
     </main>
     
     <!-- Footer -->
-    <footer class="border-t bg-white mt-auto">
-        <div class="max-w-6xl mx-auto px-4 py-6 text-center text-gray-500 text-sm">
-            <p>Luminate Cookbook - Tools for Luminate Online, developed by Eric Grandmaison</p>
+    <footer class="relative mt-auto border-t bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50">
+        <div class="max-w-6xl mx-auto px-4 py-8">
+            <div class="flex flex-col items-center justify-center gap-4">
+                <!-- Main content -->
+                <div class="flex items-center gap-2 text-gray-700">
+                    <img src="/static/images/chef-logo.png" alt="Chef" class="w-8 h-8 rounded-full">
+                    <span class="text-sm font-medium">Luminate Cookbook</span>
+                </div>
+                
+                <!-- Description -->
+                <p class="text-center text-sm text-gray-600 max-w-md">
+                    Tools for Luminate Online administrators
+                </p>
+                
+                <!-- GitHub link -->
+                <a href="https://github.com/egrandmaison89/luminate-cookbook" 
+                   target="_blank" 
+                   rel="noopener noreferrer"
+                   class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors duration-200 rounded-lg hover:bg-white/50">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"/>
+                    </svg>
+                    View on GitHub
+                </a>
+                
+                <!-- Copyright -->
+                <p class="text-xs text-gray-500">
+                    Developed by Eric Grandmaison
+                </p>
+            </div>
         </div>
     </footer>
     
