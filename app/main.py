@@ -376,7 +376,7 @@ async def banner_preview(
     file: UploadFile = File(...),
     width: int = Form(600),
     height: int = Form(340),
-    quality: int = Form(82),
+    quality: int = Form(90),
     crop_padding: float = Form(0.15),
 ):
     """
@@ -417,7 +417,7 @@ async def banner_process(
     files: List[UploadFile] = File(...),
     width: int = Form(600),
     height: int = Form(340),
-    quality: int = Form(82),
+    quality: int = Form(90),
     include_retina: bool = Form(True),
     filename_prefix: str = Form(""),
     crop_padding: float = Form(0.15),

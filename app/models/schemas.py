@@ -79,7 +79,7 @@ class BannerSettings(BaseModel):
     """Settings for banner processing."""
     width: int = Field(default=600, ge=100, le=2000, description="Output width in pixels")
     height: int = Field(default=340, ge=100, le=1000, description="Output height in pixels")
-    quality: int = Field(default=82, ge=1, le=100, description="JPEG quality")
+    quality: int = Field(default=90, ge=1, le=100, description="JPEG quality (higher = better color preservation)")
     include_retina: bool = Field(default=True, description="Include 2x retina version")
     filename_prefix: str = Field(default="", description="Prefix for output filenames")
     crop_padding: float = Field(default=0.15, ge=0.0, le=0.3, description="Padding around detected subjects (0.0-0.3)")

@@ -295,6 +295,10 @@ def process_single_image(
     """
     # Load image
     pil_image = Image.open(io.BytesIO(image_bytes))
+    
+    # Extract ICC profile before any conversions
+    icc_profile = pil_image.info.get('icc_profile')
+    
     if pil_image.mode != 'RGB':
         pil_image = pil_image.convert('RGB')
     
@@ -339,9 +343,17 @@ def process_single_image(
     if resized.mode in ('RGBA', 'P'):
         resized = resized.convert('RGB')
     
-    # Save to bytes
+    # Save to bytes with color preservation
     buffer = io.BytesIO()
-    resized.save(buffer, format='JPEG', quality=settings.quality, optimize=True)
+    save_kwargs = {
+        'format': 'JPEG',
+        'quality': settings.quality,
+        'optimize': True,
+        'subsampling': 0  # Disable chroma subsampling (4:4:4) for vibrant colors
+    }
+    if icc_profile:
+        save_kwargs['icc_profile'] = icc_profile
+    resized.save(buffer, **save_kwargs)
     buffer.seek(0)
     
     results.append({
@@ -364,7 +376,15 @@ def process_single_image(
             resized_retina = resized_retina.convert('RGB')
         
         buffer_retina = io.BytesIO()
-        resized_retina.save(buffer_retina, format='JPEG', quality=settings.quality, optimize=True)
+        retina_save_kwargs = {
+            'format': 'JPEG',
+            'quality': settings.quality,
+            'optimize': True,
+            'subsampling': 0  # Disable chroma subsampling (4:4:4) for vibrant colors
+        }
+        if icc_profile:
+            retina_save_kwargs['icc_profile'] = icc_profile
+        resized_retina.save(buffer_retina, **retina_save_kwargs)
         buffer_retina.seek(0)
         
         results.append({
@@ -396,6 +416,10 @@ def generate_crop_preview(
     
     # Load image
     pil_image = Image.open(io.BytesIO(image_bytes))
+    
+    # Extract ICC profile before any conversions
+    icc_profile = pil_image.info.get('icc_profile')
+    
     if pil_image.mode != 'RGB':
         pil_image = pil_image.convert('RGB')
     
@@ -414,9 +438,16 @@ def generate_crop_preview(
         img_width, img_height, people, faces, target_aspect_ratio, padding
     )
     
-    # Convert image to base64 for frontend
+    # Convert image to base64 for frontend with color preservation
     buffer = io.BytesIO()
-    pil_image.save(buffer, format='JPEG', quality=85)
+    preview_save_kwargs = {
+        'format': 'JPEG',
+        'quality': 90,  # Higher quality for preview
+        'subsampling': 0  # Disable chroma subsampling for vibrant colors
+    }
+    if icc_profile:
+        preview_save_kwargs['icc_profile'] = icc_profile
+    pil_image.save(buffer, **preview_save_kwargs)
     buffer.seek(0)
     image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
     
