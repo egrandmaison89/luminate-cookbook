@@ -91,6 +91,21 @@ class TestEmailBeautifierIntegration(unittest.TestCase):
         # Either as one line or the content preserved
         self.assertIn("and family are invited", result.replace("\n", " "))
 
+    def test_sample_email_detects_footer(self):
+        """Footer should start at Dana-Farber Logo with visual break, social links removed."""
+        from app.services.email_beautifier import beautify_email
+
+        raw = load_fixture("textemail.txt")
+        result, _ = beautify_email(raw)
+
+        # Visual break before footer
+        self.assertIn("═", result)
+        # Main org URL preserved in footer
+        self.assertIn("dana-farber.org", result)
+        # Social links removed (no facebook.com, etc. in output)
+        self.assertNotIn("facebook.com", result)
+        self.assertNotIn("instagram.com", result)
+
 
 class TestStripCssBlocks(unittest.TestCase):
     """Unit tests for strip_css_blocks."""

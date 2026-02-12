@@ -28,7 +28,14 @@ CTA_PHRASES = [
     'discover', 'explore', 'find out more', 'see more', 'get it now',
     'try it free', 'start free trial', 'claim offer', 'redeem',
     'rsvp', 'rsvp today', 'rsvp now', 'register', 'sign up now',
+    # Fundraising CTAs - must be standalone (see STRICT_CTA_MAX_LEN)
+    'donate', 'donate now', 'give now', 'volunteer', 'register',
 ]
+
+# Standalone CTA phrases: when these appear, line must be short to avoid matching
+# "Please donate to..." or "You can volunteer at..." in body copy
+STRICT_CTA_PHRASES = {'donate', 'donate now', 'give now', 'volunteer'}
+STRICT_CTA_MAX_LEN = 25  # Max chars for line to count as CTA (standalone phrase)
 
 
 def clean_url(url: str, strip_tracking: bool = True) -> str:
@@ -132,20 +139,29 @@ def detect_ctas(text: str) -> List[Tuple[str, str, int, int]]:
                 if candidate:
                     prev_line = candidate
                     break
-            if prev_line and any(phrase in prev_line.lower() for phrase in CTA_PHRASES):
-                    # CTAs are short button-like phrases, not full sentences
-                    # Skip if prev_line is too long (e.g. "The event will sell out, so RSVP promptly!")
-                    if len(prev_line) <= 50:
-                        # Replace from start of CTA line (j) to end of URL line (i)
-                        start_pos = len('\n'.join(lines[:j])) if j > 0 else 0
-                        end_pos = len('\n'.join(lines[:i + 1]))
-                        # Make sure we haven't already captured this
-                        overlap = any(
-                            start_pos >= start and end_pos <= end
-                            for _, _, start, end in ctas
-                        )
-                        if not overlap:
-                            ctas.append((prev_line, line_stripped, start_pos, end_pos))
+            if prev_line:
+                matched_phrase = next(
+                    (p for p in CTA_PHRASES if p in prev_line.lower()),
+                    None
+                )
+                if matched_phrase:
+                    # Strict phrases (donate, volunteer) must be standalone - short line only
+                    if matched_phrase in STRICT_CTA_PHRASES:
+                        if len(prev_line) > STRICT_CTA_MAX_LEN:
+                            matched_phrase = None  # Skip - likely body copy
+                    # All CTAs: skip if too long (e.g. "The event will sell out, so RSVP promptly!")
+                    elif len(prev_line) > 50:
+                        matched_phrase = None
+                if matched_phrase:
+                    # Replace from start of CTA line (j) to end of URL line (i)
+                    start_pos = len('\n'.join(lines[:j])) if j > 0 else 0
+                    end_pos = len('\n'.join(lines[:i + 1]))
+                    overlap = any(
+                        start_pos >= start and end_pos <= end
+                        for _, _, start, end in ctas
+                    )
+                    if not overlap:
+                        ctas.append((prev_line, line_stripped, start_pos, end_pos))
     
     return ctas
 
@@ -427,14 +443,22 @@ def join_broken_lines(text: str) -> str:
             # JOIN if next line starts with lowercase (continuation)
             if next_line[0].islower():
                 should_join = True
+            # JOIN if line ends with hyphen (hyphenated word split: "pre-", "In-")
+            elif line.rstrip().endswith('-'):
+                should_join = True
             # JOIN if line ends with comma/semicolon (trailing continuation)
             elif line.rstrip().endswith((',', ';')):
                 should_join = True
+            # JOIN if line ends with "from" or "to" (phrase continuation: "start to", "from 4:00")
+            elif line.rstrip().lower().endswith((' from', ' to', ' and', ' or')):
+                should_join = True
+            # JOIN if line ends with time pattern (broken range: "4:00" or "p.m.," split)
+            elif re.search(r'(\d{1,2}:\d{2}|p\.m\.|a\.m\.)\s*$', line.rstrip()):
+                should_join = True
             # JOIN if line doesn't end with punctuation and next starts with uppercase but continues thought
-            elif not line.rstrip().endswith(('.', '!', '?', ':', '-', '&')) and next_line[0].isupper():
-                # This is a judgment call - join if the line seems incomplete
-                # (less than 70 chars suggests it might be broken)
-                if len(line) < 70:
+            elif not line.rstrip().endswith(('.', '!', '?', ':', '&')) and next_line[0].isupper():
+                # Line seems incomplete (short, or ends with comma-equivalent)
+                if len(line) < 85:
                     should_join = True
         
         if should_join and i + 1 < len(lines):
@@ -505,8 +529,8 @@ def simplify_footer(text: str) -> str:
     if len(lines) < 5:
         return text
     
-    # Footer is typically in the last 25-30% of the document
-    search_start = max(0, int(len(lines) * 0.70))
+    # Footer is in the bottom half - header logos (e.g. "DFMC Logo") are at top
+    search_start = max(0, int(len(lines) * 0.50))
     search_region = list(enumerate(lines[search_start:], start=search_start))
     
     # Social platform labels (standalone, typical footer pattern)
@@ -514,28 +538,26 @@ def simplify_footer(text: str) -> str:
     
     footer_start_idx = None
     
-    # Strategy 1: Find 2+ consecutive social platform labels in the search region
-    consecutive_social = 0
+    # Strategy 1: Find "X Logo" in bottom half - primary footer marker
+    # e.g. "Dana-Farber Logo" - everything beneath this is footer
     for i, line in search_region:
-        line_lower = line.lower().strip()
-        if line_lower in SOCIAL_LABELS:
-            consecutive_social += 1
-            if consecutive_social >= 2:
-                # Back up to include the first social label and any logo line before it
-                footer_start_idx = max(search_start, i - consecutive_social - 2)
-                break
-        else:
-            consecutive_social = 0
+        stripped = line.strip()
+        if re.search(r'\s+Logo\s*$', stripped, re.IGNORECASE) and len(stripped) < 50:
+            footer_start_idx = i
+            break
     
-    # Strategy 2: Find "X Logo" pattern in last 15 lines only (footer logo)
+    # Strategy 2: Find 2+ consecutive social platform labels
     if footer_start_idx is None:
-        last_15_start = max(0, len(lines) - 15)
-        for i in range(last_15_start, len(lines)):
-            line = lines[i].strip()
-            # Standalone "Something Logo" (e.g. "Dana-Farber Logo", "DFMC Logo")
-            if re.match(r'^[\w\-]+\s+Logo\s*$', line, re.IGNORECASE):
-                footer_start_idx = i
-                break
+        consecutive_social = 0
+        for i, line in search_region:
+            line_lower = line.lower().strip()
+            if line_lower in SOCIAL_LABELS:
+                consecutive_social += 1
+                if consecutive_social >= 2:
+                    footer_start_idx = max(search_start, i - consecutive_social - 2)
+                    break
+            else:
+                consecutive_social = 0
     
     # Strategy 3: Multiple consecutive URLs in last 30% (footer link block)
     if footer_start_idx is None:
