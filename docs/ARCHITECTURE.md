@@ -506,63 +506,30 @@ def calculate_safe_crop_region(img_width, img_height, faces, target_aspect):
 
 ### EmailBeautifier
 
-**Purpose**: Transform ugly HTML-to-plaintext emails into readable plain text
+**Purpose**: Transform ugly HTML-to-plaintext emails (from marketing platforms like Luminate) into readable plain text. Primary use case: fundraising emails.
+
+**Full documentation**: See [docs/EMAIL_BEAUTIFIER.md](EMAIL_BEAUTIFIER.md) for implementation details, pitfalls, and iterative change workflow.
 
 **Processing Pipeline**:
 
 ```
-1. Strip CSS blocks (styles, media queries)
-2. Detect and extract preview text
-3. Join broken lines (fix mid-sentence breaks)
-4. Detect CTAs (call-to-action buttons/links)
-5. Format CTAs with >>> arrows <<<
-6. Clean tracking parameters from URLs
-7. Convert remaining links to markdown
-8. Simplify footer (remove logos, consolidate links)
+1. Strip CSS blocks (styles, @media queries)
+2. Detect and extract preview text (header)
+3. Join broken lines (hyphenated words, time ranges, mid-sentence breaks)
+4. Detect CTAs (standalone phrases followed by URL)
+5. Format CTAs with >>> arrows <<< and visual bounce
+6. Clean tracking parameters from URLs (utm_*, aff, s_src, etc.)
+7. Convert remaining links to markdown (optional)
+8. Simplify footer (identify from "X Logo" in bottom half; add visual break; remove social links)
 9. Normalize whitespace
+10. Add preview banner at top
 ```
 
-**CTA Detection Strategies**:
+**Footer detection**: Footer starts at "X Logo" (e.g. "Dana-Farber Logo") in the **bottom 50%** of the document. Social links removed; main org URL preserved. Fallbacks: 2+ consecutive social labels, or 3+ consecutive URLs.
 
-1. **All-caps text followed by URL**:
-   ```
-   CLICK HERE
-   https://example.com
-   ```
+**CTA detection**: Standalone phrases (≤50 chars; ≤25 for donate/volunteer/give now) followed by URL. Avoids body copy like "The event will sell out, so RSVP promptly!"
 
-2. **CTA phrase with colon**:
-   ```
-   Click here: https://example.com
-   ```
-
-3. **URL preceded by CTA text**:
-   ```
-   Click the button below to get started
-   https://example.com
-   ```
-
-**URL Cleaning**:
-Removes tracking parameters:
-- UTM parameters: `utm_source`, `utm_medium`, `utm_campaign`, etc.
-- Social media: `fbclid`, `gclid`, `igshid`
-- Email marketing: `mc_cid`, `mc_eid`, `mkt_tok`
-
-**Output Example**:
-
-```
-Before:
-body { font-family: Arial; } Check out our new feature: https://example.com?utm_source=email&utm_campaign=launch&fbclid=abc123 Facebook https://facebook.com/page
-
-After:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Check out our new feature
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
->>> LEARN MORE: https://example.com <<<
-
-═══════════════════════════════════════════════
-https://example.com | https://facebook.com/page
-```
+**URL cleaning**: Strips utm_*, aff, ref, s_src, fbclid, gclid, mc_cid, mc_eid, etc.
 
 ---
 

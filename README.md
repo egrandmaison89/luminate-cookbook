@@ -44,14 +44,16 @@ Extract and analyze nested PageBuilder components from any Luminate Online page 
 ### ✨ Plain Text Email Beautifier
 Transform ugly HTML-to-plaintext conversions into beautifully formatted plain text with clean URLs and styled CTAs.
 
-**Use Case**: Addresses the common problem of email clients mangling HTML-to-text conversions, producing unreadable plain text versions.
+**Use Case**: Addresses the common problem of email clients mangling HTML-to-text conversions, producing unreadable plain text versions. Optimized for fundraising emails (Luminate/Convio).
 
-- ✅ Strips tracking parameters (utm_*, fbclid, etc.)
-- ✅ Intelligent CTA detection and formatting
-- ✅ Markdown link conversion
+- ✅ Strips tracking parameters (utm_*, aff, s_src, etc.)
+- ✅ Intelligent CTA detection (RSVP, Donate, Give Now, Volunteer, etc.)
+- ✅ Joins broken sentences (hyphenated words, time ranges)
+- ✅ Footer detection with visual break; social links removed
 - ✅ CSS block removal
-- ✅ Footer simplification
 - ✅ Line-break normalization
+
+> See [Email Beautifier Technical](docs/EMAIL_BEAUTIFIER.md) for implementation details and iterative change workflow.
 
 ## Tech Stack
 
@@ -303,6 +305,8 @@ luminate-cookbook/
 │   ├── process_banners.py           # Standalone banner processing script
 │   └── upload_to_luminate.py        # CLI upload tool
 ├── docs/
+│   ├── EMAIL_BEAUTIFIER.md          # Email beautifier technical doc
+│   ├── AI_AGENT_GUIDE.md            # Guide for AI agents (change workflow)
 │   ├── DEPLOYMENT.md                # Full deployment guide
 │   ├── GOOGLE_CLOUD_RUN.md          # Cloud Run specific docs
 │   └── TROUBLESHOOTING.md           # Common issues and solutions
@@ -493,9 +497,11 @@ MIT
 - **[Technical Docs](docs/)** - Implementation details
   - [Architecture](docs/ARCHITECTURE.md)
   - [Banner Processor Technical](docs/BANNER_PROCESSOR_TECHNICAL.md)
+  - [Email Beautifier Technical](docs/EMAIL_BEAUTIFIER.md) - Pipeline, design decisions, iterative workflow
   - [Deployment Guide](docs/DEPLOYMENT.md)
   - [Google Cloud Run Setup](docs/GOOGLE_CLOUD_RUN.md)
   - [Troubleshooting](docs/TROUBLESHOOTING.md)
+- **[AI Agent Guide](docs/AI_AGENT_GUIDE.md)** - For AI assistants: how to make changes without breaking progress
 - **[Changelog](CHANGELOG.md)** - Version history and updates
 
 ## Contributing

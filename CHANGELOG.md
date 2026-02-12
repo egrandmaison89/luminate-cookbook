@@ -2,6 +2,45 @@
 
 All notable changes to Luminate Cookbook are documented in this file.
 
+## [2.2.0] - 2026-02-12
+
+### Improved - Plain Text Email Beautifier
+
+**Content Preservation (Critical Fixes)**
+- **Footer detection rewritten**: Footer now identified from bottom 50% of document. Primary trigger: line ending with " Logo" (e.g. "Dana-Farber Logo"). Fixes bug where body content was wrongly treated as footer and removed.
+- **Visual break before footer**: Adds `═══` separator; removes social media links; keeps main org URL.
+
+**Line Joining Enhancements**
+- Join hyphenated words split across lines ("pre-" + "race", "In-" + "Memory")
+- Join time ranges ("4:00" + "4:45 p.m.")
+- Join phrase continuations ("from", "to", "and", "or" at line end)
+- Relaxed incomplete-line threshold (70→85 chars)
+
+**CTA Detection Improvements**
+- Added fundraising CTAs: Donate, Donate Now, Give Now, Volunteer, Register
+- **Strict CTA matching**: Phrases like "donate" and "volunteer" require ≤25 char line to avoid matching body copy ("You can donate to our cause")
+- Pattern 3: Check previous non-empty line (skip blank lines) for CTA
+- Max 50 chars for general CTAs to avoid "The event will sell out, so RSVP promptly!"
+
+**Tracking Params**
+- Added: aff, ref, ref_src, ref_cid, cmpid (affiliate/referral)
+
+**CTA Visual Bounce**
+- Blank lines before and after formatted CTAs (`>>> CTA: url <<<`)
+
+**Documentation**
+- Created `docs/EMAIL_BEAUTIFIER.md` — technical doc, pipeline, pitfalls, iterative workflow
+- Created `docs/AI_AGENT_GUIDE.md` — guide for AI agents to build on progress without breaking
+- Updated `docs/ARCHITECTURE.md` — accurate Email Beautifier section
+- Updated `docs/README.md`, `DOCUMENTATION_SUMMARY.md` — links to new docs
+
+**Testing**
+- Added `tests/test_email_beautifier.py` (10 tests)
+- Added `tests/fixtures/textemail.txt`, `textemail_expected.txt`
+- Run: `PYTHONPATH=. python3 -m unittest tests.test_email_beautifier -v`
+
+---
+
 ## [2.1.0] - 2026-01-30
 
 ### Added - Banner Processor Enhancement

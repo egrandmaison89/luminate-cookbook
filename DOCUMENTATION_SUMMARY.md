@@ -151,6 +151,8 @@ luminate-cookbook/
 **Want to...**
 - Use the banner processor? → [docs/BANNER_PROCESSOR_USER_GUIDE.md](docs/BANNER_PROCESSOR_USER_GUIDE.md)
 - Understand how it works? → [docs/BANNER_PROCESSOR_TECHNICAL.md](docs/BANNER_PROCESSOR_TECHNICAL.md)
+- Use or improve the Email Beautifier? → [docs/EMAIL_BEAUTIFIER.md](docs/EMAIL_BEAUTIFIER.md)
+- Make changes as an AI agent? → [docs/AI_AGENT_GUIDE.md](docs/AI_AGENT_GUIDE.md)
 - Deploy the app? → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) or [docs/GOOGLE_CLOUD_RUN.md](docs/GOOGLE_CLOUD_RUN.md)
 - Fix an issue? → [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - See what changed? → [CHANGELOG.md](CHANGELOG.md)
