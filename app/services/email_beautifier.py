@@ -17,6 +17,7 @@ TRACKING_PARAMS = {
     'utm_id', 'utm_source_platform', 'utm_creative_format', 'utm_marketing_tactic',
     'fbclid', 'gclid', 'msclkid', '_ga', 'mc_cid', 'mc_eid',
     'mkt_tok', 'trk', 'trkid', 'icid', 'igshid', 'zanpid', 's_src',
+    'aff', 'ref', 'ref_src', 'ref_cid', 'cmpid',  # affiliate/referral params
 }
 
 # Common CTA phrases (case-insensitive)
@@ -26,6 +27,7 @@ CTA_PHRASES = [
     'shop now', 'buy now', 'order now', 'book now', 'reserve',
     'discover', 'explore', 'find out more', 'see more', 'get it now',
     'try it free', 'start free trial', 'claim offer', 'redeem',
+    'rsvp', 'rsvp today', 'rsvp now', 'register', 'sign up now',
 ]
 
 
@@ -116,44 +118,53 @@ def detect_ctas(text: str) -> List[Tuple[str, str, int, int]]:
             if not overlap:
                 ctas.append((cta_text, url, match.start(), match.end()))
     
-    # Pattern 3: Standalone URL preceded by CTA-like text within 50 chars
-    # Example: "Click the button below to get started\nhttps://example.com"
+    # Pattern 3: Standalone URL preceded by CTA-like text on previous line(s)
+    # Example: "RSVP Today\n\nhttps://example.com" or "Click here\nhttps://example.com"
     lines = text.split('\n')
     for i, line in enumerate(lines):
         line_stripped = line.strip()
         # Check if line is a standalone URL
         if re.match(r'^https?://[^\s]+$', line_stripped):
-            # Check previous line(s) for CTA text
-            if i > 0:
-                prev_line = lines[i-1].strip()
-                if any(phrase in prev_line.lower() for phrase in CTA_PHRASES):
-                    # Calculate position in original text
-                    text_before = '\n'.join(lines[:i])
-                    start_pos = len(text_before) + 1 if text_before else 0
-                    end_pos = start_pos + len(line_stripped)
-                    
-                    # Make sure we haven't already captured this
-                    overlap = any(
-                        start_pos >= start and end_pos <= end
-                        for _, _, start, end in ctas
-                    )
-                    if not overlap:
-                        ctas.append((prev_line, line_stripped, start_pos, end_pos))
+            # Check previous non-empty line(s) for CTA text
+            prev_line = None
+            for j in range(i - 1, -1, -1):
+                candidate = lines[j].strip()
+                if candidate:
+                    prev_line = candidate
+                    break
+            if prev_line and any(phrase in prev_line.lower() for phrase in CTA_PHRASES):
+                    # CTAs are short button-like phrases, not full sentences
+                    # Skip if prev_line is too long (e.g. "The event will sell out, so RSVP promptly!")
+                    if len(prev_line) <= 50:
+                        # Replace from start of CTA line (j) to end of URL line (i)
+                        start_pos = len('\n'.join(lines[:j])) if j > 0 else 0
+                        end_pos = len('\n'.join(lines[:i + 1]))
+                        # Make sure we haven't already captured this
+                        overlap = any(
+                            start_pos >= start and end_pos <= end
+                            for _, _, start, end in ctas
+                        )
+                        if not overlap:
+                            ctas.append((prev_line, line_stripped, start_pos, end_pos))
     
     return ctas
 
 
-def format_cta(cta_text: str, url: str) -> str:
+def format_cta(cta_text: str, url: str, visual_bounce: bool = True) -> str:
     """
-    Format a CTA with arrow styling.
+    Format a CTA with arrow styling and optional visual bounce (blank lines).
     
     Example: >>> GET STARTED: https://example.com <<<
+    With visual_bounce: blank line above and below for emphasis.
     """
     # Ensure CTA text is uppercase and clean
     cta_clean = cta_text.strip().upper()
     url_clean = url.strip()
     
-    return f">>> {cta_clean}: {url_clean} <<<"
+    formatted = f">>> {cta_clean}: {url_clean} <<<"
+    if visual_bounce:
+        return f"\n\n{formatted}\n\n"
+    return formatted
 
 
 def convert_links_to_markdown(text: str, ctas: List[Tuple[str, str, int, int]]) -> str:
@@ -269,8 +280,8 @@ def strip_css_blocks(text: str) -> str:
         # Check if line matches any CSS pattern OR we're inside braces
         is_css = any(re.search(pattern, stripped) for pattern in css_patterns) or brace_count > 0
         
-        # If NOT CSS and braces are balanced, we found content
-        if not is_css and brace_count == 0:
+        # If NOT CSS and braces are balanced or over-closed, we found content
+        if not is_css and brace_count <= 0:
             content_start = i
             break
     
@@ -416,8 +427,11 @@ def join_broken_lines(text: str) -> str:
             # JOIN if next line starts with lowercase (continuation)
             if next_line[0].islower():
                 should_join = True
+            # JOIN if line ends with comma/semicolon (trailing continuation)
+            elif line.rstrip().endswith((',', ';')):
+                should_join = True
             # JOIN if line doesn't end with punctuation and next starts with uppercase but continues thought
-            elif not line.rstrip().endswith((',', ';', '-', '&')) and next_line[0].isupper():
+            elif not line.rstrip().endswith(('.', '!', '?', ':', '-', '&')) and next_line[0].isupper():
                 # This is a judgment call - join if the line seems incomplete
                 # (less than 70 chars suggests it might be broken)
                 if len(line) < 70:
@@ -473,37 +487,69 @@ def simplify_footer(text: str) -> str:
     """
     Simplify and clean up footer section.
     
-    - Removes logo/image references
+    Footer is identified from the END of the document (last 25-30% of lines).
+    Only treats content as footer when we find clear footer patterns:
+    - 2+ consecutive social platform labels (Facebook, X, Instagram, etc.)
+    - "X Logo" standalone in the last 15 lines
+    
+    Does NOT treat header logos or body text (e.g. "Dana-Farber Marathon Challenge")
+    as footer - those appear early in the document.
+    
+    - Removes logo/image references from footer
     - Consolidates organization links
     - Formats unsubscribe/privacy policy inline
     - Removes social media/badge links
     """
     lines = text.split('\n')
     
-    # First, find where footer likely starts (look for social media or org logos)
-    footer_start_idx = None
-    for i, line in enumerate(lines):
-        line_lower = line.lower().strip()
-        # Footer often starts with logo references or social media before links
-        if ('logo' in line_lower or 
-            line_lower in ['facebook', 'twitter', 'x', 'instagram', 'youtube', 'linkedin'] or
-            'dana-farber' in line_lower and i < len(lines) - 20):  # Logo text usually comes before URLs
-            footer_start_idx = i
-            break
+    if len(lines) < 5:
+        return text
     
-    # If no clear footer start, try to find it by looking for multiple consecutive URLs
+    # Footer is typically in the last 25-30% of the document
+    search_start = max(0, int(len(lines) * 0.70))
+    search_region = list(enumerate(lines[search_start:], start=search_start))
+    
+    # Social platform labels (standalone, typical footer pattern)
+    SOCIAL_LABELS = {'facebook', 'twitter', 'x', 'instagram', 'youtube', 'linkedin'}
+    
+    footer_start_idx = None
+    
+    # Strategy 1: Find 2+ consecutive social platform labels in the search region
+    consecutive_social = 0
+    for i, line in search_region:
+        line_lower = line.lower().strip()
+        if line_lower in SOCIAL_LABELS:
+            consecutive_social += 1
+            if consecutive_social >= 2:
+                # Back up to include the first social label and any logo line before it
+                footer_start_idx = max(search_start, i - consecutive_social - 2)
+                break
+        else:
+            consecutive_social = 0
+    
+    # Strategy 2: Find "X Logo" pattern in last 15 lines only (footer logo)
+    if footer_start_idx is None:
+        last_15_start = max(0, len(lines) - 15)
+        for i in range(last_15_start, len(lines)):
+            line = lines[i].strip()
+            # Standalone "Something Logo" (e.g. "Dana-Farber Logo", "DFMC Logo")
+            if re.match(r'^[\w\-]+\s+Logo\s*$', line, re.IGNORECASE):
+                footer_start_idx = i
+                break
+    
+    # Strategy 3: Multiple consecutive URLs in last 30% (footer link block)
     if footer_start_idx is None:
         url_count = 0
-        for i, line in enumerate(lines):
-            if line.strip().startswith('http'):
+        for i in range(len(lines) - 1, search_start - 1, -1):
+            if lines[i].strip().startswith('http'):
                 url_count += 1
-                if url_count >= 3 and footer_start_idx is None:
-                    footer_start_idx = i - 2
+                if url_count >= 3:
+                    footer_start_idx = max(0, i - 2)
                     break
             else:
                 url_count = 0
     
-    # If still no footer found, return original
+    # Conservative: if no clear footer pattern found, return original unchanged
     if footer_start_idx is None:
         return text
     
