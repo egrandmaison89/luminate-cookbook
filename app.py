@@ -13,6 +13,7 @@ import streamlit as st
 import importlib.util
 import os
 
+
 # Page configuration
 st.set_page_config(
     page_title="Luminate Cookbook",
