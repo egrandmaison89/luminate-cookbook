@@ -63,13 +63,13 @@ gcloud run deploy luminate-cookbook \
     --platform managed \
     --region $REGION \
     --allow-unauthenticated \
-    --port 8501 \
+    --port 8000 \
     --memory 2Gi \
     --cpu 2 \
-    --timeout 300 \
+    --timeout 600 \
+    --min-instances 1 \
     --max-instances 10 \
-    --set-env-vars "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright" \
-    --set-env-vars "STREAMLIT_SERVER_MAX_UPLOAD_SIZE=200"
+    --set-env-vars "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright"
 
 # Get the service URL
 SERVICE_URL=$(gcloud run services describe luminate-cookbook \
