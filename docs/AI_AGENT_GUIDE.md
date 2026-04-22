@@ -2,6 +2,8 @@
 
 This document helps AI assistants (Cursor, Copilot, etc.) make changes that **build upon** existing work without breaking it. Read this before modifying code or docs.
 
+**QA before “done”**: Run tests, fix failures, then update docs. Full checklist: [AGENT_QA.md](AGENT_QA.md).
+
 ---
 
 ## Document Trail — What to Read First
@@ -20,6 +22,7 @@ This document helps AI assistants (Cursor, Copilot, etc.) make changes that **bu
 1. **Read the relevant doc** — Each major feature has a technical doc with design decisions and pitfalls.
 2. **Run existing tests** — `PYTHONPATH=. python3 -m unittest tests.test_<module> -v`
 3. **Understand the pipeline** — Many tools have ordered steps; changing order or one step can break others.
+4. **When done** — Re-run tests, then update documentation and changelog as in [Change Workflow](#change-workflow-preserve-progress). Do not announce completion without verification; if tests fail, debug and fix first ([AGENT_QA.md](AGENT_QA.md)).
 
 ---
 
@@ -42,15 +45,21 @@ This document helps AI assistants (Cursor, Copilot, etc.) make changes that **bu
 PYTHONPATH=. python3 -m unittest tests.test_email_beautifier -v
 ```
 
-### 4. Update Documentation
+### 4. Update Documentation (required for iterative changes)
 
-- If you change behavior, constants, or add rules: update the relevant doc.
-- If you add a new feature: add a section to its technical doc and to [docs/README.md](README.md) if user-facing.
+- **Same iteration as the code change** — do not leave the repo with outdated API text, feature descriptions, or dependency lists.
+- If you change behavior, constants, or add rules: update the feature technical doc and any affected sections in the root [README.md](../README.md).
+- If you add a new module, route, or dependency: update [README.md](../README.md) (API table, project tree, or tech stack) and [docs/README.md](README.md) index if the doc set changes.
+- New feature: add a section to its technical doc; link from docs index when appropriate.
 
 ### 5. Update CHANGELOG.md
 
 - Add an entry under `[Unreleased]` or a new version.
 - Brief description of what changed and why (for future sessions).
+
+### 6. Thorough QA (mandatory)
+
+Follow [AGENT_QA.md](AGENT_QA.md): run tests, smoke-test when relevant, and only then treat the work as complete. If something fails, debug and re-run before moving on.
 
 ---
 
@@ -85,10 +94,10 @@ Future AI sessions can grep for recent CHANGELOG entries, read the technical doc
 ## Quick Reference
 
 **Email Beautifier files**:
-- Service: `app/services/email_beautifier.py`
+- Services: `app/services/email_html_to_text.py` (HTML → plain), `app/services/email_beautifier.py` (plain-text beautify + `beautify_email_from_html`)
 - Tests: `tests/test_email_beautifier.py`
-- Fixtures: `tests/fixtures/textemail.txt`, `textemail_expected.txt`
-- Doc: [docs/EMAIL_BEAUTIFIER.md](EMAIL_BEAUTIFIER.md)
+- Fixtures: `tests/fixtures/textemail.txt` (plain text for `beautify_email` tests)
+- Docs: [docs/EMAIL_BEAUTIFIER.md](EMAIL_BEAUTIFIER.md), [docs/AGENT_QA.md](AGENT_QA.md)
 
 **Run dev server**: `uvicorn app.main:app --reload --port 8000` (from project root)
 **Email Beautifier UI**: http://localhost:8000/email-beautifier

@@ -47,7 +47,7 @@ Luminate Cookbook is a production-grade web application providing four specializ
 │  │  ├─ BrowserSessionManager (singleton)                        │  │
 │  │  │   └─ Persistent Playwright sessions                       │  │
 │  │  ├─ BannerProcessor (OpenCV face detection)                  │  │
-│  │  ├─ EmailBeautifier (regex text processing)                  │  │
+│  │  ├─ EmailBeautifier (HTML→text + regex beautify)             │  │
 │  │  └─ PageBuilderService (HTML parsing)                        │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 │                               │                                      │
@@ -504,32 +504,33 @@ def calculate_safe_crop_region(img_width, img_height, faces, target_aspect):
 
 ---
 
-### EmailBeautifier
+### EmailBeautifier (HTML → plain text)
 
-**Purpose**: Transform ugly HTML-to-plaintext emails (from marketing platforms like Luminate) into readable plain text. Primary use case: fundraising emails.
+**Purpose**: Accept **HTML** from marketing emails (Luminate / Convio), convert to text with `email_html_to_text` (BeautifulSoup + html2text), then run the plain-text `beautify_email` pipeline. Primary use case: fundraising and event email.
 
-**Full documentation**: See [docs/EMAIL_BEAUTIFIER.md](EMAIL_BEAUTIFIER.md) for implementation details, pitfalls, and iterative change workflow.
+**Full documentation**: [docs/EMAIL_BEAUTIFIER.md](EMAIL_BEAUTIFIER.md). QA and doc-update expectations: [docs/AGENT_QA.md](AGENT_QA.md).
 
-**Processing Pipeline**:
+**Processing pipeline (high level)**:
 
 ```
-1. Strip CSS blocks (styles, @media queries)
-2. Detect and extract preview text (header)
-3. Join broken lines (hyphenated words, time ranges, mid-sentence breaks)
-4. Detect CTAs (standalone phrases followed by URL)
-5. Format CTAs with >>> arrows <<< and visual bounce
-6. Clean tracking parameters from URLs (utm_*, aff, s_src, etc.)
-7. Convert remaining links to markdown (optional)
-8. Simplify footer (identify from "X Logo" in bottom half; add visual break; remove social links)
-9. Normalize whitespace
-10. Add preview banner at top
+A. email_html_to_plain_text: strip noise, preheader, html2text, normalize links / table junk
+B. beautify_email:
+   1. Strip CSS blocks (if any left)
+   2. Detect and extract preview text
+   3. Join broken lines
+   4. Detect / format CTAs
+   5. Clean tracking parameters from URLs
+   6. convert_links_to_markdown (skips URLs already in [text](url))
+   7. Simplify footer; preview banner; normalize whitespace
 ```
 
 **Footer detection**: Footer starts at "X Logo" (e.g. "Dana-Farber Logo") in the **bottom 50%** of the document. Social links removed; main org URL preserved. Fallbacks: 2+ consecutive social labels, or 3+ consecutive URLs.
 
-**CTA detection**: Standalone phrases (≤50 chars; ≤25 for donate/volunteer/give now) followed by URL. Avoids body copy like "The event will sell out, so RSVP promptly!"
+**CTA detection**: Standalone phrases (≤50 chars; ≤25 for donate/volunteer/give now) near URLs. Avoids long sentences.
 
-**URL cleaning**: Strips utm_*, aff, ref, s_src, fbclid, gclid, mc_cid, mc_eid, etc.
+**URL cleaning**: Strips utm_*, aff, ref, s_src, s_subsrc, fbclid, gclid, mc_cid, mc_eid, etc.
+
+**API / UI**: `POST /api/email-beautifier/process` (JSON with `html`, or `multipart` file upload); UI at `/email-beautifier`.
 
 ---
 

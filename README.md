@@ -41,16 +41,17 @@ Extract and analyze nested PageBuilder components from any Luminate Online page 
 - ✅ ZIP download with organized folder structure
 - ✅ Optional exclusion of global stylesheets
 
-### ✨ Plain Text Email Beautifier
-Transform ugly HTML-to-plaintext conversions into beautifully formatted plain text with clean URLs and styled CTAs.
+### ✨ HTML → Plain Text Email Beautifier
+Paste or upload the **HTML source** of a marketing email; get polished plain text with clean URLs and optional CTA emphasis.
 
-**Use Case**: Addresses the common problem of email clients mangling HTML-to-text conversions, producing unreadable plain text versions. Optimized for fundraising emails (Luminate/Convio).
+**Use Case**: Built for Luminate/Convio-style HTML (tables, preheader, tracking links). Converts HTML to text, then beautifies: tracking strips, line joining, footer simplification, optional markdown links.
 
-- ✅ Strips tracking parameters (utm_*, aff, s_src, etc.)
+- ✅ **HTML in**: paste in the page or upload `.html` / `multipart` API
+- ✅ Strips tracking parameters (utm_*, aff, s_src, s_subsrc, etc.)
 - ✅ Intelligent CTA detection (RSVP, Donate, Give Now, Volunteer, etc.)
 - ✅ Joins broken sentences (hyphenated words, time ranges)
 - ✅ Footer detection with visual break; social links removed
-- ✅ CSS block removal
+- ✅ Preheader / preview extraction from hidden cells where present
 - ✅ Line-break normalization
 
 > See [Email Beautifier Technical](docs/EMAIL_BEAUTIFIER.md) for implementation details and iterative change workflow.
@@ -60,6 +61,7 @@ Transform ugly HTML-to-plaintext conversions into beautifully formatted plain te
 - **Backend**: FastAPI (Python)
 - **Frontend**: Jinja2 templates + HTMX
 - **Browser Automation**: Playwright
+- **Email beautifier (HTML)**: BeautifulSoup4, html2text
 - **Deployment**: Docker / Google Cloud Run
 
 ## Local Development
@@ -82,6 +84,9 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# After pulling new code, run the line above again so new packages
+# (e.g. html2text, beautifulsoup4 for the Email Beautifier) are installed.
 
 # Install Playwright browsers
 python -m playwright install chromium
@@ -164,27 +169,29 @@ All endpoints return JSON except where noted. Interactive documentation availabl
 }
 ```
 
-### Plain Text Email Beautifier API
+### Email Beautifier API (HTML → plain text)
 
 | Endpoint | Method | Description | Returns |
 |----------|--------|-------------|---------|
-| `/api/email-beautifier/process` | POST | Beautify plain text email | `{success, beautified_text, stats}` |
+| `/api/email-beautifier/process` | POST | Convert HTML email to beautified plain text | `{success, beautified_text, stats}` |
 
-**Request Body**:
+**Request** (choose one):
+
+- **JSON** — `Content-Type: application/json`
 ```json
 {
-  "raw_text": "Ugly plain text...",
+  "html": "<html><body>…</body></html>",
   "strip_tracking": true,
   "format_ctas": true,
   "markdown_links": true
 }
 ```
 
-**Response Stats**:
-- `urls_cleaned`: Number of tracking parameters removed
-- `ctas_formatted`: Number of CTAs styled with arrows
-- `links_converted`: Number of links converted to markdown
-- `css_stripped`: Whether CSS blocks were detected and removed
+- **Multipart** — `Content-Type: multipart/form-data` with field `file` = HTML file, and the same option fields as form keys (`strip_tracking`, `format_ctas`, `markdown_links` are typical boolean strings: `true` / `false`).
+
+**Response stats** (non-exhaustive):
+- `urls_cleaned`, `ctas_formatted`, `links_converted`, `lines_before`, `lines_after`
+- `css_stripped`, `preview_text_found`, `source` (e.g. `"html"` when using `beautify_email_from_html`)
 
 ## Architecture
 
@@ -278,7 +285,8 @@ luminate-cookbook/
 │   ├── services/
 │   │   ├── browser_manager.py       # ⭐ Core 2FA solution (738 lines)
 │   │   ├── banner_processor.py      # OpenCV face detection + image processing
-│   │   ├── email_beautifier.py      # Plain text beautification (737 lines)
+│   │   ├── email_html_to_text.py    # HTML email → initial plain text
+│   │   ├── email_beautifier.py     # Plain-text beautify + from-HTML entrypoint
 │   │   └── pagebuilder_service.py   # PageBuilder decomposition wrapper
 │   ├── models/
 │   │   └── schemas.py               # Pydantic request/response models
@@ -321,7 +329,7 @@ luminate-cookbook/
 
 - **browser_manager.py**: The heart of the 2FA solution. Manages persistent Playwright browser sessions with lifecycle management, cleanup, and thread-safe operations.
 - **banner_processor.py**: Image processing with MediaPipe pose detection for full-body awareness, OpenCV face detection fallback, and smart crop algorithms.
-- **email_beautifier.py**: Sophisticated text processing with regex pattern matching, URL cleaning, CTA detection, and footer simplification.
+- **email_html_to_text.py** / **email_beautifier.py**: HTML-to-text (BeautifulSoup, html2text) plus regex/URL/CTA/footer pipeline for plain-text output.
 - **main.py**: FastAPI application with both JSON API endpoints and HTMX HTML partial endpoints for dynamic UI updates.
 - **Dockerfile**: Multi-stage build that installs all Playwright system dependencies (Chromium requires ~30 system packages).
 

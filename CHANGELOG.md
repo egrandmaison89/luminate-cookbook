@@ -2,6 +2,14 @@
 
 All notable changes to Luminate Cookbook are documented in this file.
 
+## [Unreleased]
+
+### Documentation & process
+- Added [docs/AGENT_QA.md](docs/AGENT_QA.md) — run tests, debug on failure, update docs in the same iteration before considering work complete.
+- Added `.cursor/rules/iterative-changes-qa.mdc` to reinforce QA and documentation updates for every iterative change.
+- Updated [docs/AI_AGENT_GUIDE.md](docs/AI_AGENT_GUIDE.md), [docs/README.md](docs/README.md), [docs/EMAIL_BEAUTIFIER.md](docs/EMAIL_BEAUTIFIER.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and root [README.md](README.md) to match the HTML-based Email Beautifier and current API.
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md): local fix for `No module named 'html2text'`; README local setup reminds to re-run `pip install -r requirements.txt` after pulls.
+
 ## [2.2.0] - 2026-02-12
 
 ### Improved - Plain Text Email Beautifier

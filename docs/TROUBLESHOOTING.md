@@ -89,6 +89,28 @@ gcloud run services update luminate-cookbook \
 
 ---
 
+### 2.5 Email Beautifier (local): `No module named 'html2text'` or `No module named 'bs4'`
+
+**When it happens**: After updating the project, the Email Beautifier returns this error in the UI while other tools still work.
+
+**Cause**: The Python environment running `uvicorn` does not have the latest dependencies from `requirements.txt` (the app uses `html2text` and `beautifulsoup4` for HTML email conversion).
+
+**Fix** (use the same interpreter you use to start the server):
+
+```bash
+cd /path/to/luminate-cookbook
+source venv/bin/activate   # if you use a venv
+pip install -r requirements.txt
+```
+
+Then restart the dev server. To confirm:
+
+```bash
+python -c "import html2text, bs4; print('ok')"
+```
+
+---
+
 ### 3. Upload Verification Failures
 
 #### Issue: "Upload completed but verification failed"

@@ -181,8 +181,11 @@ class PageBuilderResponse(BaseModel):
 # Email Beautifier Schemas
 
 class EmailBeautifierRequest(BaseModel):
-    """Request to beautify plain text email."""
-    raw_text: str = Field(..., description="Raw plain text email to beautify")
+    """Request to beautify an HTML email into beautiful plain text."""
+    html: str = Field(
+        default="",
+        description="HTML source of the email (paste of full or partial markup)",
+    )
     strip_tracking: bool = Field(default=True, description="Strip tracking parameters from URLs")
     format_ctas: bool = Field(default=True, description="Format CTAs with arrow styling")
     markdown_links: bool = Field(default=True, description="Convert links to markdown format")

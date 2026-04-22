@@ -114,7 +114,7 @@ async def email_beautifier_page(request: Request):
     """Email beautifier page."""
     return templates.TemplateResponse("email_beautifier.html", {
         "request": request,
-        "title": "Plain Text Email Beautify",
+        "title": "HTML Email to Plain Text",
     })
 
 
@@ -537,42 +537,86 @@ async def pagebuilder_analyze(request: PageBuilderRequest):
 # Email Beautifier API Routes
 # =============================================================================
 
+def _form_bool(value: object, default: bool = True) -> bool:
+    if value is None:
+        return default
+    return str(value).lower() in ("1", "true", "on", "yes")
+
+
 @app.post("/api/email-beautifier/process", response_model=EmailBeautifierResponse)
-async def email_beautifier_process(request: EmailBeautifierRequest):
+async def email_beautifier_process(request: Request):
     """
-    Beautify plain text email.
-    
-    Takes ugly plain text (from HTML email conversion) and returns
-    beautifully formatted plain text with cleaned URLs and styled CTAs.
+    Beautify an HTML email into well-formatted plain text.
+
+    Accepts ``application/json`` (``html`` + option flags) or
+    ``multipart/form-data`` (``file`` = .html and the same option fields).
     """
-    from app.services.email_beautifier import beautify_email
-    
+    from app.services.email_beautifier import beautify_email_from_html
+
+    content_type = request.headers.get("content-type", "")
+    html = ""
+    strip_tracking = True
+    format_ctas = True
+    markdown_links = True
+
     try:
-        if not request.raw_text or not request.raw_text.strip():
-            return EmailBeautifierResponse(
-                success=False,
-                error="No text provided",
-                message="Please enter some text to beautify"
-            )
-        
-        beautified_text, stats = beautify_email(
-            raw_text=request.raw_text,
-            strip_tracking=request.strip_tracking,
-            format_ctas=request.format_ctas,
-            markdown_links=request.markdown_links,
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            upload = form.get("file")
+            if upload is not None and hasattr(upload, "read"):
+                body = await upload.read()
+                html = body.decode("utf-8", errors="replace")
+            else:
+                html = str(form.get("html") or "")
+            strip_tracking = _form_bool(form.get("strip_tracking"), True)
+            format_ctas = _form_bool(form.get("format_ctas"), True)
+            markdown_links = _form_bool(form.get("markdown_links"), True)
+        else:
+            body = await request.json()
+            er = EmailBeautifierRequest.model_validate(body)
+            html = er.html
+            strip_tracking = er.strip_tracking
+            format_ctas = er.format_ctas
+            markdown_links = er.markdown_links
+    except Exception as e:
+        return EmailBeautifierResponse(
+            success=False,
+            error="Invalid request body",
+            message=str(e),
         )
-        
+
+    if not html or not str(html).strip():
+        return EmailBeautifierResponse(
+            success=False,
+            error="No HTML provided",
+            message="Paste HTML in the text area or upload an .html file",
+        )
+
+    try:
+        beautified_text, stats = beautify_email_from_html(
+            html=str(html),
+            strip_tracking=strip_tracking,
+            format_ctas=format_ctas,
+            markdown_links=markdown_links,
+        )
+
         return EmailBeautifierResponse(
             success=True,
             beautified_text=beautified_text,
             stats=stats,
-            message="Email beautified successfully"
+            message="Email beautified successfully",
+        )
+    except ValueError as e:
+        return EmailBeautifierResponse(
+            success=False,
+            error=str(e),
+            message="Could not read meaningful text from the HTML",
         )
     except Exception as e:
         return EmailBeautifierResponse(
             success=False,
             error=str(e),
-            message="An error occurred while beautifying the email"
+            message="An error occurred while beautifying the email",
         )
 
 

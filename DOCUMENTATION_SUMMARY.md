@@ -153,19 +153,13 @@ luminate-cookbook/
 - Understand how it works? → [docs/BANNER_PROCESSOR_TECHNICAL.md](docs/BANNER_PROCESSOR_TECHNICAL.md)
 - Use or improve the Email Beautifier? → [docs/EMAIL_BEAUTIFIER.md](docs/EMAIL_BEAUTIFIER.md)
 - Make changes as an AI agent? → [docs/AI_AGENT_GUIDE.md](docs/AI_AGENT_GUIDE.md)
+- Run QA / know when work is “done”? → [docs/AGENT_QA.md](docs/AGENT_QA.md)
 - Deploy the app? → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) or [docs/GOOGLE_CLOUD_RUN.md](docs/GOOGLE_CLOUD_RUN.md)
 - Fix an issue? → [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - See what changed? → [CHANGELOG.md](CHANGELOG.md)
 - Understand architecture? → [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Navigate all docs? → [docs/README.md](docs/README.md)
 
-## No Functionality Changed
+## Accurate now
 
-✅ All code remains unchanged  
-✅ All features work identically  
-✅ Only documentation organization improved  
-✅ No breaking changes  
-✅ No new dependencies  
-✅ No configuration changes  
-
-This was purely a documentation consolidation to improve developer experience and reduce clutter.
+For current APIs, dependencies, and behavior, treat **[README.md](README.md)** and **[CHANGELOG.md](CHANGELOG.md)** as authoritative. Some older “documentation only” notes elsewhere may be stale; prefer the docs index in [docs/README.md](docs/README.md).

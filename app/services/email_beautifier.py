@@ -18,6 +18,7 @@ TRACKING_PARAMS = {
     'fbclid', 'gclid', 'msclkid', '_ga', 'mc_cid', 'mc_eid',
     'mkt_tok', 'trk', 'trkid', 'icid', 'igshid', 'zanpid', 's_src',
     'aff', 'ref', 'ref_src', 'ref_cid', 'cmpid',  # affiliate/referral params
+    's_subsrc',
 }
 
 # Common CTA phrases (case-insensitive)
@@ -214,6 +215,9 @@ def convert_links_to_markdown(text: str, ctas: List[Tuple[str, str, int, int]]) 
         # Skip if this URL is within a formatted CTA
         is_in_cta = any(start <= url_start < end for start, end in cta_positions)
         if is_in_cta:
+            continue
+        # Skip URLs that are already in markdown [label](https://...) from HTML conversion
+        if url_start >= 2 and text[url_start - 2 : url_start] == "](":
             continue
         
         # Look for preceding text that might be the link text
@@ -802,3 +806,28 @@ def beautify_email(
     stats['lines_after'] = len(text.split('\n'))
     
     return text, stats
+
+
+def beautify_email_from_html(
+    html: str,
+    strip_tracking: bool = True,
+    format_ctas: bool = True,
+    markdown_links: bool = True,
+) -> Tuple[str, Dict]:
+    """
+    Convert an HTML marketing email to plain text, then run :func:`beautify_email`.
+    """
+    from app.services.email_html_to_text import email_html_to_plain_text
+
+    raw_text = email_html_to_plain_text(html)
+    if not raw_text.strip():
+        raise ValueError("No readable content after converting HTML to text")
+
+    beautified, stats = beautify_email(
+        raw_text=raw_text,
+        strip_tracking=strip_tracking,
+        format_ctas=format_ctas,
+        markdown_links=markdown_links,
+    )
+    stats["source"] = "html"
+    return beautified, stats

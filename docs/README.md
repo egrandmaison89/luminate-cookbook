@@ -36,11 +36,10 @@ Welcome to the Luminate Cookbook documentation. This directory contains all tech
 - Troubleshooting specific to banner processor
 
 **[Email Beautifier Technical](EMAIL_BEAUTIFIER.md)**
-- Processing pipeline and design decisions
-- Footer detection, CTA detection, line joining
-- Configuration constants and test fixtures
-- Iterative improvement workflow and pitfalls
-- For AI agents: [AI Agent Guide](AI_AGENT_GUIDE.md) — how to make changes without breaking progress
+- HTML input (paste or upload) → plain text, then beautification
+- `email_html_to_text` + `email_beautifier` pipelines, API (JSON and multipart)
+- Footer detection, CTA detection, line joining, tracking param stripping
+- For AI agents: [AI Agent Guide](AI_AGENT_GUIDE.md), [Agent QA checklist](AGENT_QA.md)
 
 **[Deployment Guide](DEPLOYMENT.md)**
 - Local development setup
@@ -98,14 +97,17 @@ Technical documentation focuses on:
 - Lessons learned (Email Beautifier pitfalls)
 - Leaving a trail for future conversations
 
+**[Agent QA](AGENT_QA.md)** — Run tests, debug failures before continuing, update docs in the same iteration; definition of “complete.”
+
 ## Contributing to Documentation
 
 When adding features:
 1. Update relevant user guides
 2. Add technical documentation for complex features
-3. Update API endpoint documentation in README
+3. Update API endpoint documentation in the root README and any affected `docs/*.md`
 4. Add troubleshooting entries for known issues
 5. Update CHANGELOG.md
+6. Follow [AGENT_QA.md](AGENT_QA.md) (tests + docs in the same change)
 
 Keep documentation:
 - **Concise** - Users don't read walls of text

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Plain Text Email Beautify{% endblock %}
+{% block title %}HTML Email to Plain Text{% endblock %}
 
 {% block content %}
 <div class="mb-8">
-    <h1 class="text-3xl font-bold text-gray-800 mb-2">✨ Plain Text Email Beautify</h1>
-    <p class="text-gray-600">Transform ugly plain text emails into beautiful, clean, well-formatted text</p>
+    <h1 class="text-3xl font-bold text-gray-800 mb-2">✨ HTML → Beautiful Plain Text</h1>
+    <p class="text-gray-600">Paste the HTML of a marketing email or upload a saved <code class="text-sm bg-gray-100 px-1 rounded">.html</code> file. We convert it to readable, polished plain text with clean links and a simplified footer.</p>
 </div>
 
 <div class="space-y-6">
@@ -37,21 +37,21 @@
     
     <!-- Input Section -->
     <div class="bg-white rounded-xl shadow-sm p-6">
-        <h2 class="text-lg font-semibold text-gray-800 mb-4">📥 Input: Ugly Plain Text</h2>
-        
+        <h2 class="text-lg font-semibold text-gray-800 mb-2">📥 Input: HTML email</h2>
+        <p class="text-sm text-gray-500 mb-4">View message source, save as <code class="text-xs bg-gray-100 px-1 rounded">.html</code>, or export from your ESP. Large table layouts and hidden preheader lines are OK.</p>
+
+        <label class="block text-sm font-medium text-gray-700 mb-2">Upload an HTML file (optional)</label>
+        <input type="file" id="html-file" accept=".html,.htm,text/html"
+               class="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-dashed border-gray-300 rounded-lg p-2">
+
+        <label class="block text-sm font-medium text-gray-700 mt-4 mb-2">Or paste HTML</label>
         <textarea id="input-text" 
                   class="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-y"
-                  placeholder="Paste your ugly plain text email here...
+                  placeholder="Paste full HTML here (e.g. from View Source or a downloaded .html file)…
 
-Example:
-CLICK HERE
-
-https://example.com/page?utm_source=email&utm_medium=newsletter&fbclid=12345
-
-Check out our website:   https://example.com?utm_campaign=promo
-
-
-Unsubscribe: https://example.com/unsub"></textarea>
+<table>
+  …
+</table>"></textarea>
         
         <div class="mt-3 flex items-center justify-between">
             <p class="text-sm text-gray-500">
@@ -59,7 +59,7 @@ Unsubscribe: https://example.com/unsub"></textarea>
             </p>
             <button type="button" id="clear-input" 
                     class="text-sm text-gray-600 hover:text-red-600 transition-colors">
-                Clear Input
+                Clear input &amp; file
             </button>
         </div>
     </div>
@@ -158,14 +158,29 @@ Unsubscribe: https://example.com/unsub"></textarea>
 // Character counter
 const inputText = document.getElementById('input-text');
 const charCount = document.getElementById('char-count');
+const htmlFile = document.getElementById('html-file');
 
-inputText.addEventListener('input', () => {
-    charCount.textContent = inputText.value.length;
+function syncCharCount() {
+    charCount.textContent = (inputText.value || '').length;
+}
+
+inputText.addEventListener('input', syncCharCount);
+
+htmlFile.addEventListener('change', () => {
+    const f = htmlFile.files && htmlFile.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+        inputText.value = typeof r.result === 'string' ? r.result : '';
+        syncCharCount();
+    };
+    r.readAsText(f);
 });
 
 // Clear input
 document.getElementById('clear-input').addEventListener('click', () => {
     inputText.value = '';
+    htmlFile.value = '';
     charCount.textContent = '0';
     document.getElementById('output-section').classList.add('hidden');
     document.getElementById('error-section').classList.add('hidden');
@@ -174,79 +189,91 @@ document.getElementById('clear-input').addEventListener('click', () => {
 
 // Beautify button
 document.getElementById('beautify-btn').addEventListener('click', async () => {
-    const rawText = inputText.value;
-    
-    if (!rawText.trim()) {
-        showError('Please enter some text to beautify');
+    const pastedHtml = (inputText.value || '').trim();
+    const hasFile = htmlFile.files && htmlFile.files.length > 0;
+
+    if (!pastedHtml && !hasFile) {
+        showError('Paste HTML or choose an .html file to beautify');
         return;
     }
-    
-    // Show loading state
+
     const btn = document.getElementById('beautify-btn');
     const spinner = document.getElementById('beautify-spinner');
     const btnText = document.getElementById('beautify-text');
-    
+
     btn.disabled = true;
     spinner.classList.remove('hidden');
     btnText.textContent = 'Beautifying...';
-    
-    // Hide previous results
+
     document.getElementById('output-section').classList.add('hidden');
     document.getElementById('error-section').classList.add('hidden');
     document.getElementById('comparison-section').classList.add('hidden');
-    
-    // Get settings
+
     const stripTracking = document.getElementById('strip-tracking').checked;
     const formatCtas = document.getElementById('format-ctas').checked;
     const markdownLinks = document.getElementById('markdown-links').checked;
-    
+
+    let originalLabel = '';
+    let fetchPromise;
+
     try {
-        const response = await fetch('/api/email-beautifier/process', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                raw_text: rawText,
-                strip_tracking: stripTracking,
-                format_ctas: formatCtas,
-                markdown_links: markdownLinks,
-            }),
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showOutput(data.beautified_text, data.stats, rawText);
+        if (hasFile) {
+            const fd = new FormData();
+            fd.append('file', htmlFile.files[0]);
+            fd.append('strip_tracking', stripTracking ? 'true' : 'false');
+            fd.append('format_ctas', formatCtas ? 'true' : 'false');
+            fd.append('markdown_links', markdownLinks ? 'true' : 'false');
+            originalLabel = `Uploaded: ${htmlFile.files[0].name}`;
+            fetchPromise = fetch('/api/email-beautifier/process', { method: 'POST', body: fd });
         } else {
-            showError(data.error || 'An error occurred');
+            originalLabel = 'Pasted HTML';
+            fetchPromise = fetch('/api/email-beautifier/process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    html: inputText.value,
+                    strip_tracking: stripTracking,
+                    format_ctas: formatCtas,
+                    markdown_links: markdownLinks,
+                }),
+            });
+        }
+
+        const response = await fetchPromise;
+        const data = await response.json();
+
+        if (data.success) {
+            const beforeSnippet = (inputText.value || '').substring(0, 500);
+            showOutput(data.beautified_text, data.stats, beforeSnippet, originalLabel);
+        } else {
+            showError(data.error || data.message || 'An error occurred');
         }
     } catch (error) {
         showError('Failed to connect to server: ' + error.message);
     } finally {
-        // Reset button state
         btn.disabled = false;
         spinner.classList.add('hidden');
         btnText.textContent = '✨ Beautify Email';
     }
 });
 
-function showOutput(beautifiedText, stats, originalText) {
-    // Show output section
+function showOutput(beautifiedText, stats, beforeSnippet, sourceLabel) {
     document.getElementById('output-section').classList.remove('hidden');
     document.getElementById('output-text').value = beautifiedText;
-    
-    // Update stats
+
     document.getElementById('stat-urls').textContent = stats.urls_cleaned || 0;
     document.getElementById('stat-ctas').textContent = stats.ctas_formatted || 0;
     document.getElementById('stat-links').textContent = stats.links_converted || 0;
-    
+
     const linesReduced = (stats.lines_before || 0) - (stats.lines_after || 0);
     document.getElementById('stat-lines').textContent = linesReduced;
-    
-    // Show comparison
+
     document.getElementById('comparison-section').classList.remove('hidden');
-    document.getElementById('comparison-before').textContent = originalText.substring(0, 500) + (originalText.length > 500 ? '...' : '');
+    const before =
+        (sourceLabel ? sourceLabel + '\n\n' : '') +
+        (beforeSnippet || '') +
+        ((beforeSnippet || '').length >= 500 ? '...' : '');
+    document.getElementById('comparison-before').textContent = before;
     document.getElementById('comparison-after').textContent = beautifiedText.substring(0, 500) + (beautifiedText.length > 500 ? '...' : '');
     
     // Scroll to output

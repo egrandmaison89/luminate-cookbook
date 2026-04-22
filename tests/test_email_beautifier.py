@@ -171,6 +171,38 @@ https://www.eventbrite.com/e/123"""
         self.assertTrue(any("rsvp" in t.lower() for t in cta_texts))
 
 
+class TestBeautifyEmailFromHtml(unittest.TestCase):
+    """HTML → plain text → beautify pipeline."""
+
+    def test_minimal_html_preserves_body_and_strips_tracking(self):
+        from app.services.email_beautifier import beautify_email_from_html
+
+        html = """<!DOCTYPE html><html><body>
+<table><tr><td style="display:none;font-size:0">Preview line here</td></tr></table>
+<p>Hello from the team.</p>
+<p>See https://example.com/path?utm_source=x&amp;s_subsrc=y for details.</p>
+<p>RSVP Today</p>
+<p>https://events.test/rsvp?utm_medium=email</p>
+<table id="footer"><tr><td>Dana-Farber Logo</td></tr></table>
+</body></html>"""
+        result, stats = beautify_email_from_html(html)
+        self.assertEqual(stats.get("source"), "html")
+        self.assertIn("Preview line here", result)
+        self.assertIn("Hello from the team", result)
+        self.assertNotIn("utm_source", result)
+        self.assertNotIn("s_subsrc", result)
+        self.assertIn("═", result)
+        self.assertIn("RSVP", result.upper())
+
+    def test_email_html_to_plain_strips_styles(self):
+        from app.services.email_html_to_text import email_html_to_plain_text
+
+        html = "<style>body{color:red}</style><p>Hi</p>"
+        plain = email_html_to_plain_text(html)
+        self.assertIn("Hi", plain)
+        self.assertNotIn("color:red", plain)
+
+
 class TestCleanUrl(unittest.TestCase):
     """Unit tests for clean_url."""
 
@@ -197,6 +229,14 @@ class TestCleanUrl(unittest.TestCase):
         url = "https://example.com?s_src=RPEM021126A"
         result = clean_url(url)
         self.assertNotIn("s_src", result)
+
+    def test_strips_s_subsrc(self):
+        from app.services.email_beautifier import clean_url
+
+        url = "https://example.com/page?s_subsrc=FREM041626&keep=1"
+        result = clean_url(url)
+        self.assertNotIn("s_subsrc", result)
+        self.assertIn("keep=1", result)
 
 
 class TestJoinBrokenLines(unittest.TestCase):
