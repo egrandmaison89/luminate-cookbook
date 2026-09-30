@@ -36,7 +36,8 @@ luminate-cookbook/
 ├── deploy-cloud-run-no-docker.sh
 ├── .gitignore
 ├── .dockerignore
-├── app.py
+├── archive/                         ← legacy Streamlit entrypoint
+├── start-local.sh
 │
 ├── app/                              ← Application code (unchanged)
 │   ├── main.py
@@ -163,3 +164,11 @@ luminate-cookbook/
 ## Accurate now
 
 For current APIs, dependencies, and behavior, treat **[README.md](README.md)** and **[CHANGELOG.md](CHANGELOG.md)** as authoritative. Some older “documentation only” notes elsewhere may be stale; prefer the docs index in [docs/README.md](docs/README.md).
+
+---
+
+## Sep 2026 local untangle
+
+- Primary run path: FastAPI via `./start-local.sh` ([docs/LOCAL.md](docs/LOCAL.md))
+- Streamlit entrypoint moved to `archive/legacy_streamlit_app.py` ([docs/LEGACY.md](docs/LEGACY.md))
+- Hosting guidance: [docs/HOSTING_OPTIONS.md](docs/HOSTING_OPTIONS.md)
