@@ -1,3 +1,7 @@
+> **Current stack: FastAPI on uvicorn / Docker / Cloud Run.**  
+> Streamlit Cloud sections below are **historical only** — do not follow them.  
+> For daily use see [LOCAL.md](LOCAL.md). For where to host next see [HOSTING_OPTIONS.md](HOSTING_OPTIONS.md).
+
 # Deployment Guide: Luminate Cookbook
 
 Complete guide for deploying the Luminate Cookbook application to various platforms.

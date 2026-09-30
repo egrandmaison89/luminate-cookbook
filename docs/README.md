@@ -4,8 +4,11 @@ Welcome to the Luminate Cookbook documentation. This directory contains all tech
 
 ## Quick Start
 
+- **Run locally (recommended):** [LOCAL.md](LOCAL.md) → `./start-local.sh` → http://127.0.0.1:8000
 - **New to the project?** Start with the [main README](../README.md)
-- **Deploying?** See [Deployment Guide](DEPLOYMENT.md) or [Google Cloud Run Setup](GOOGLE_CLOUD_RUN.md)
+- **Public hosting options:** [HOSTING_OPTIONS.md](HOSTING_OPTIONS.md) (do not use Streamlit Cloud)
+- **Deploying to Cloud Run?** See [Deployment Guide](DEPLOYMENT.md) or [Google Cloud Run Setup](GOOGLE_CLOUD_RUN.md) — only after billing exists
+- **Legacy Streamlit notes:** [LEGACY.md](LEGACY.md)
 - **Having issues?** Check [Troubleshooting](TROUBLESHOOTING.md)
 
 ## Documentation Structure

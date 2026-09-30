@@ -66,36 +66,31 @@ Paste or upload the **HTML source** of a marketing email; get polished plain tex
 
 ## Local Development
 
-### Prerequisites
-
-- Python 3.9+
-- Playwright browsers
-
-### Setup
+**Day-to-day:** see **[docs/LOCAL.md](docs/LOCAL.md)**.
 
 ```bash
-# Clone the repository
-git clone <repo-url>
-cd luminate-cookbook
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# After pulling new code, run the line above again so new packages
-# (e.g. html2text, beautifulsoup4 for the Email Beautifier) are installed.
-
-# Install Playwright browsers
-python -m playwright install chromium
-
-# Run the app
-uvicorn app.main:app --reload --port 8000
+cd ~/Desktop/AI/cursor_projects/luminate-cookbook   # or your clone path
+./start-local.sh
 ```
 
-Visit `http://localhost:8000` in your browser.
+Open http://127.0.0.1:8000 — tools at `/upload`, `/banner`, `/pagebuilder`, `/email-beautifier`; API docs at `/docs`.
+
+### First-time setup
+
+```bash
+python3 -m venv venv
+./venv/bin/python3 -m pip install -r requirements.txt
+./venv/bin/python3 -m playwright install chromium
+./start-local.sh
+```
+
+After `git pull`, re-run the `pip install -r requirements.txt` line so new packages land.
+
+> This app is **FastAPI**, not Streamlit. Do not `streamlit run` anything. Legacy Streamlit entrypoint: `archive/legacy_streamlit_app.py` ([docs/LEGACY.md](docs/LEGACY.md)).
+
+### Public hosting
+
+Free Cloud Run / similar quotas ran out before. Options and recommendations: **[docs/HOSTING_OPTIONS.md](docs/HOSTING_OPTIONS.md)**. Prefer local for daily work.
 
 ## Deployment
 
@@ -517,7 +512,7 @@ MIT
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Test locally with `uvicorn app.main:app --reload`
+4. Test locally with `./start-local.sh`
 5. Ensure Docker builds successfully
 6. Submit a pull request with clear description
 
@@ -530,7 +525,8 @@ pip install -r requirements.txt
 python -m playwright install chromium
 
 # Run locally
-uvicorn app.main:app --reload --port 8000
+./start-local.sh
+# or: ./venv/bin/python3 -m uvicorn app.main:app --reload --port 8000
 
 # Test
 python tests/test_playwright.py

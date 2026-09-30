@@ -4,6 +4,12 @@ All notable changes to Luminate Cookbook are documented in this file.
 
 ## [Unreleased]
 
+### Local DX & docs cleanup
+- Added `./start-local.sh` and [docs/LOCAL.md](docs/LOCAL.md) as the supported local run path (avoids broken venv shebangs after moving the project folder).
+- Moved obsolete Streamlit entrypoint to `archive/legacy_streamlit_app.py`; see [docs/LEGACY.md](docs/LEGACY.md).
+- Added [docs/HOSTING_OPTIONS.md](docs/HOSTING_OPTIONS.md) (local-first; Cloud Run / Fly / Railway notes; Streamlit Cloud retired).
+- README + docs index updated so FastAPI/uvicorn is the only primary path.
+
 ### Documentation & process
 - Added [docs/AGENT_QA.md](docs/AGENT_QA.md) — run tests, debug on failure, update docs in the same iteration before considering work complete.
 - Added `.cursor/rules/iterative-changes-qa.mdc` to reinforce QA and documentation updates for every iterative change.
